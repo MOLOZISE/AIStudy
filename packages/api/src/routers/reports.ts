@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../trpc.js';
-import { db, reports } from '@repo/db';
-import { eq, and } from 'drizzle-orm';
+import { db, reports, profiles } from '@repo/db';
+import { eq, and, desc } from 'drizzle-orm';
 
 export const reportsRouter = router({
   /**
@@ -42,6 +42,38 @@ export const reportsRouter = router({
         description: input.description,
       });
 
+      return { success: true };
+    }),
+
+  /**
+   * List all reports (admin: verified users only)
+   */
+  getList: protectedProcedure
+    .input(z.object({ status: z.enum(['pending', 'resolved', 'dismissed']).optional(), limit: z.number().min(1).max(100).default(50) }))
+    .query(async ({ ctx, input }) => {
+      const [profile] = await db.select({ isVerified: profiles.isVerified }).from(profiles).where(eq(profiles.id, ctx.userId)).limit(1);
+      if (!profile?.isVerified) throw new TRPCError({ code: 'FORBIDDEN', message: 'Verified users only' });
+
+      const conditions = input.status ? [eq(reports.status, input.status)] : [];
+      const rows = await db
+        .select()
+        .from(reports)
+        .where(conditions.length ? and(...conditions as [typeof conditions[0]]) : undefined)
+        .orderBy(desc(reports.createdAt))
+        .limit(input.limit);
+      return rows;
+    }),
+
+  /**
+   * Update report status (admin: verified users only)
+   */
+  updateStatus: protectedProcedure
+    .input(z.object({ id: z.string(), status: z.enum(['pending', 'resolved', 'dismissed']) }))
+    .mutation(async ({ ctx, input }) => {
+      const [profile] = await db.select({ isVerified: profiles.isVerified }).from(profiles).where(eq(profiles.id, ctx.userId)).limit(1);
+      if (!profile?.isVerified) throw new TRPCError({ code: 'FORBIDDEN', message: 'Verified users only' });
+
+      await db.update(reports).set({ status: input.status }).where(eq(reports.id, input.id));
       return { success: true };
     }),
 });

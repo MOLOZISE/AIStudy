@@ -100,10 +100,11 @@ async function adjustCount(
   if (targetType === 'post') {
     const field = voteType === 'up' ? posts.upvoteCount : posts.downvoteCount;
     const key = voteType === 'up' ? 'upvoteCount' : 'downvoteCount';
-    await db
-      .update(posts)
-      .set({ [key]: sql`${field} + ${delta}` })
-      .where(eq(posts.id, targetId));
+    // Update vote count then recalculate hot score from current counts
+    await db.update(posts).set({ [key]: sql`${field} + ${delta}` }).where(eq(posts.id, targetId));
+    await db.update(posts).set({
+      hotScore: sql`GREATEST(0, upvote_count - downvote_count)::numeric / POWER(EXTRACT(EPOCH FROM (NOW() - created_at)) / 3600.0 + 2, 1.5)`,
+    }).where(eq(posts.id, targetId));
   } else if (targetType === 'comment' && voteType === 'up') {
     await db
       .update(comments)

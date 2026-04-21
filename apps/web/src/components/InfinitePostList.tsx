@@ -14,11 +14,12 @@ type SortOption = 'hot' | 'new' | 'top';
 
 interface InfinitePostListProps {
   channelId?: string;
+  flair?: string;
 }
 
 const LIMIT = 20;
 
-export function InfinitePostList({ channelId }: InfinitePostListProps) {
+export function InfinitePostList({ channelId, flair }: InfinitePostListProps) {
   const [sort, setSort] = useState<SortOption>('hot');
   const [offset, setOffset] = useState(0);
   const [allPosts, setAllPosts] = useState<FeedPost[]>([]);
@@ -26,7 +27,7 @@ export function InfinitePostList({ channelId }: InfinitePostListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const { data, isFetching, refetch } = trpc.posts.getFeed.useQuery(
-    { channelId, sort, limit: LIMIT, offset },
+    { channelId, flair, sort, limit: LIMIT, offset },
     { keepPreviousData: true }
   );
 
@@ -41,12 +42,12 @@ export function InfinitePostList({ channelId }: InfinitePostListProps) {
     }
   }, [data, offset]);
 
-  // Reset when sort or channel changes
+  // Reset when sort, channel, or flair changes
   useEffect(() => {
     setOffset(0);
     setAllPosts([]);
     setHasMore(true);
-  }, [sort, channelId]);
+  }, [sort, channelId, flair]);
 
   const loadMore = useCallback(() => {
     if (!isFetching && hasMore) {

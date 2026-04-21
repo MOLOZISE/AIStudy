@@ -1,18 +1,31 @@
 'use client';
 
 import { useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { InfinitePostList } from '@/components/InfinitePostList';
 import { PostCreateModal } from '@/components/PostCreateModal';
+import { FlairChips } from '@/components/FlairChips';
 
 export default function FeedPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const channelId = searchParams.get('channel') ?? undefined;
+  const activeFlair = searchParams.get('flair') ?? undefined;
   const [showModal, setShowModal] = useState(false);
   const [feedKey, setFeedKey] = useState(0);
 
   function handleCreated() {
     setFeedKey((k) => k + 1);
+  }
+
+  function handleFlairChange(flair: string | undefined) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (flair) {
+      params.set('flair', flair);
+    } else {
+      params.delete('flair');
+    }
+    router.push(`/feed?${params.toString()}`);
   }
 
   return (
@@ -29,7 +42,11 @@ export default function FeedPage() {
         </button>
       </div>
 
-      <InfinitePostList key={feedKey} channelId={channelId} />
+      <div className="mb-4">
+        <FlairChips activeFlair={activeFlair} onChange={handleFlairChange} />
+      </div>
+
+      <InfinitePostList key={feedKey} channelId={channelId} flair={activeFlair} />
 
       {showModal && (
         <PostCreateModal

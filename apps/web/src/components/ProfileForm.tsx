@@ -1,34 +1,67 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { trpc } from '@/lib/trpc';
+import { uploadAvatar } from '@/lib/storage';
+import { toast } from '@/store/toast';
+import { useAuthStore } from '@/store/auth';
 
 export function ProfileForm() {
+  const { user } = useAuthStore();
+  const utils = trpc.useContext();
   const { data: profile, isLoading } = trpc.auth.getMe.useQuery();
-  const updateProfile = trpc.auth.updateProfile.useMutation();
+  const updateProfile = trpc.auth.updateProfile.useMutation({
+    onSuccess: () => {
+      utils.auth.getMe.invalidate();
+      toast.success('프로필이 저장되었습니다.');
+    },
+  });
 
   const [displayName, setDisplayName] = useState('');
   const [department, setDepartment] = useState('');
   const [jobTitle, setJobTitle] = useState('');
-  const [saved, setSaved] = useState(false);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (profile) {
       setDisplayName(profile.displayName ?? '');
       setDepartment(profile.department ?? '');
       setJobTitle(profile.jobTitle ?? '');
+      setAvatarPreview(profile.avatarUrl ?? null);
     }
   }, [profile]);
 
+  function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAvatarFile(file);
+    setAvatarPreview(URL.createObjectURL(file));
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    await updateProfile.mutateAsync({
-      displayName: displayName || undefined,
-      department: department || undefined,
-      jobTitle: jobTitle || undefined,
-    });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    if (!user) return;
+    setUploading(true);
+    try {
+      let avatarUrl: string | undefined;
+      if (avatarFile) {
+        avatarUrl = await uploadAvatar(avatarFile, user.id);
+      }
+      await updateProfile.mutateAsync({
+        displayName: displayName || undefined,
+        department: department || undefined,
+        jobTitle: jobTitle || undefined,
+        ...(avatarUrl ? { avatarUrl } : {}),
+      });
+      setAvatarFile(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '저장 실패');
+    } finally {
+      setUploading(false);
+    }
   }
 
   if (isLoading) {
@@ -37,6 +70,40 @@ export function ProfileForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Avatar */}
+      <div className="flex items-center gap-4">
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          className="w-16 h-16 rounded-full bg-slate-200 flex items-center justify-center text-2xl text-slate-400 overflow-hidden hover:opacity-80 transition-opacity shrink-0"
+          title="아바타 변경"
+        >
+          {avatarPreview ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={avatarPreview} alt="avatar" className="w-full h-full object-cover" />
+          ) : (
+            <span className="text-2xl">{displayName.charAt(0).toUpperCase() || '?'}</span>
+          )}
+        </button>
+        <div>
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+          >
+            사진 변경
+          </button>
+          <p className="text-xs text-slate-400 mt-0.5">JPG, PNG, WebP · 최대 2MB</p>
+        </div>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          onChange={handleAvatarChange}
+          className="hidden"
+        />
+      </div>
+
       <div>
         <label htmlFor="displayName" className="block text-sm font-medium text-slate-700 mb-1">
           이름 (닉네임)
@@ -85,10 +152,10 @@ export function ProfileForm() {
 
       <button
         type="submit"
-        disabled={updateProfile.isPending}
+        disabled={updateProfile.isPending || uploading}
         className="w-full py-2 px-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
       >
-        {updateProfile.isPending ? '저장 중...' : saved ? '저장됨 ✓' : '저장'}
+        {uploading ? '업로드 중...' : updateProfile.isPending ? '저장 중...' : '저장'}
       </button>
     </form>
   );

@@ -1,17 +1,33 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { router, publicProcedure, protectedProcedure } from '../trpc.js';
-import { db, posts } from '@repo/db';
-import { eq, desc, and, sql, ilike, or } from 'drizzle-orm';
+import { db, posts, profiles } from '@repo/db';
+import { eq, desc, and, sql, ilike, or, getTableColumns } from 'drizzle-orm';
+
+const postSelect = {
+  ...getTableColumns(posts),
+  authorName: profiles.displayName,
+  authorAvatar: profiles.avatarUrl,
+};
 
 const ANON_ANIMALS = [
   '강아지', '고양이', '토끼', '사자', '호랑이', '곰', '여우', '늑대', '코끼리', '기린',
   '펭귄', '오리', '독수리', '두더지', '너구리', '수달', '고슴도치', '다람쥐',
 ];
 
-function generateAnonAlias(): string {
-  const animal = ANON_ANIMALS[Math.floor(Math.random() * ANON_ANIMALS.length)];
-  const num = Math.floor(Math.random() * 100);
+// djb2 hash — same seed+postId always produces same index
+function djb2(str: string): number {
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) {
+    h = ((h << 5) + h + str.charCodeAt(i)) >>> 0;
+  }
+  return h;
+}
+
+function generateDeterministicAlias(anonymousSeed: string, postId: string): string {
+  const hash = djb2(anonymousSeed + postId);
+  const animal = ANON_ANIMALS[hash % ANON_ANIMALS.length];
+  const num = hash % 100;
   return `익명${animal}${num}`;
 }
 
@@ -23,15 +39,17 @@ export const postsRouter = router({
     .input(
       z.object({
         channelId: z.string().optional(),
+        flair: z.string().optional(),
         sort: z.enum(['hot', 'new', 'top']).default('hot'),
         limit: z.number().min(1).max(50).default(20),
         offset: z.number().min(0).default(0),
       })
     )
     .query(async ({ input }) => {
-      const whereClause = input.channelId
-        ? and(eq(posts.isDeleted, false), eq(posts.channelId, input.channelId))
-        : eq(posts.isDeleted, false);
+      const conditions = [eq(posts.isDeleted, false)];
+      if (input.channelId) conditions.push(eq(posts.channelId, input.channelId));
+      if (input.flair) conditions.push(eq(posts.flair, input.flair));
+      const whereClause = conditions.length === 1 ? conditions[0] : and(...conditions);
 
       const orderCol =
         input.sort === 'new'
@@ -41,8 +59,9 @@ export const postsRouter = router({
             : desc(posts.hotScore);
 
       const items = await db
-        .select()
+        .select(postSelect)
         .from(posts)
+        .leftJoin(profiles, eq(posts.authorId, profiles.id))
         .where(whereClause)
         .orderBy(orderCol)
         .limit(input.limit)
@@ -58,8 +77,9 @@ export const postsRouter = router({
     .input(z.object({ id: z.string() }))
     .query(async ({ input }) => {
       const [post] = await db
-        .select()
+        .select(postSelect)
         .from(posts)
+        .leftJoin(profiles, eq(posts.authorId, profiles.id))
         .where(eq(posts.id, input.id))
         .limit(1);
 
@@ -85,6 +105,33 @@ export const postsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
+      let anonAlias: string | null = null;
+      if (input.isAnonymous) {
+        const postId = crypto.randomUUID();
+        const [profile] = await db
+          .select({ anonymousSeed: profiles.anonymousSeed })
+          .from(profiles)
+          .where(eq(profiles.id, ctx.userId))
+          .limit(1);
+        anonAlias = generateDeterministicAlias(profile?.anonymousSeed ?? postId, postId);
+
+        const [post] = await db
+          .insert(posts)
+          .values({
+            id: postId,
+            channelId: input.channelId,
+            authorId: ctx.userId,
+            title: input.title,
+            content: input.content,
+            isAnonymous: true,
+            anonAlias,
+            mediaUrls: input.mediaUrls,
+            flair: input.flair,
+          })
+          .returning();
+        return post;
+      }
+
       const [post] = await db
         .insert(posts)
         .values({
@@ -92,8 +139,8 @@ export const postsRouter = router({
           authorId: ctx.userId,
           title: input.title,
           content: input.content,
-          isAnonymous: input.isAnonymous,
-          anonAlias: input.isAnonymous ? generateAnonAlias() : null,
+          isAnonymous: false,
+          anonAlias: null,
           mediaUrls: input.mediaUrls,
           flair: input.flair,
         })
@@ -122,15 +169,33 @@ export const postsRouter = router({
     }),
 
   /**
-   * Get all posts by a specific author (non-anonymous only)
+   * Get all posts by a specific author (non-anonymous only, public)
    */
   getByAuthor: publicProcedure
     .input(z.object({ authorId: z.string(), limit: z.number().min(1).max(50).default(20), offset: z.number().default(0) }))
     .query(async ({ input }) => {
       const items = await db
-        .select()
+        .select(postSelect)
         .from(posts)
+        .leftJoin(profiles, eq(posts.authorId, profiles.id))
         .where(and(eq(posts.authorId, input.authorId), eq(posts.isDeleted, false), eq(posts.isAnonymous, false)))
+        .orderBy(desc(posts.createdAt))
+        .limit(input.limit)
+        .offset(input.offset);
+      return { items, hasMore: items.length === input.limit };
+    }),
+
+  /**
+   * Get current user's own posts (all, including anonymous)
+   */
+  getMyPosts: protectedProcedure
+    .input(z.object({ limit: z.number().min(1).max(50).default(20), offset: z.number().default(0) }))
+    .query(async ({ input, ctx }) => {
+      const items = await db
+        .select(postSelect)
+        .from(posts)
+        .leftJoin(profiles, eq(posts.authorId, profiles.id))
+        .where(and(eq(posts.authorId, ctx.userId), eq(posts.isDeleted, false)))
         .orderBy(desc(posts.createdAt))
         .limit(input.limit)
         .offset(input.offset);
@@ -171,8 +236,9 @@ export const postsRouter = router({
     .query(async ({ input }) => {
       const term = `%${input.q}%`;
       return db
-        .select()
+        .select(postSelect)
         .from(posts)
+        .leftJoin(profiles, eq(posts.authorId, profiles.id))
         .where(
           and(
             eq(posts.isDeleted, false),
@@ -181,6 +247,24 @@ export const postsRouter = router({
         )
         .orderBy(desc(posts.createdAt))
         .limit(input.limit);
+    }),
+
+  /**
+   * Pin/unpin a post (channel creator only)
+   */
+  pin: protectedProcedure
+    .input(z.object({ id: z.string(), pinned: z.boolean() }))
+    .mutation(async ({ input, ctx }) => {
+      const [post] = await db.select({ channelId: posts.channelId }).from(posts).where(eq(posts.id, input.id)).limit(1);
+      if (!post) throw new TRPCError({ code: 'NOT_FOUND', message: 'Post not found' });
+
+      const { channels } = await import('@repo/db');
+      const [channel] = await db.select({ createdBy: channels.createdBy }).from(channels).where(eq(channels.id, post.channelId)).limit(1);
+      if (!channel || channel.createdBy !== ctx.userId)
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Channel admin only' });
+
+      await db.update(posts).set({ isPinned: input.pinned }).where(eq(posts.id, input.id));
+      return { success: true };
     }),
 
   /**

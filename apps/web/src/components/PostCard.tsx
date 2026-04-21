@@ -16,11 +16,14 @@ type Post = {
   isAnonymous: boolean | null;
   anonAlias: string | null;
   authorId: string;
+  authorName: string | null;
+  authorAvatar: string | null;
   upvoteCount: number | null;
   commentCount: number | null;
   viewCount: number | null;
   mediaUrls: string[] | null;
   flair: string | null;
+  isPinned: boolean | null;
   createdAt: Date | string | null;
 };
 
@@ -40,12 +43,13 @@ export function PostCard({ post, onDeleted }: PostCardProps) {
   });
 
   const isOwner = user?.id === post.authorId;
-  const authorLabel = post.isAnonymous ? post.anonAlias ?? '익명' : '멤버';
+  const isAnon = post.isAnonymous;
+  const authorLabel = isAnon ? post.anonAlias ?? '익명' : (post.authorName ?? '멤버');
   const firstImage = post.mediaUrls?.[0];
   const flairLabel = FLAIRS.find((f) => f.value === post.flair)?.label;
 
   return (
-    <article className="bg-white rounded-xl border border-slate-200 p-4 hover:border-slate-300 transition-colors">
+    <article className={`bg-white rounded-xl border p-4 hover:border-slate-300 transition-colors ${post.isPinned ? 'border-blue-200 bg-blue-50/30' : 'border-slate-200'}`}>
       <ConfirmDialog
         open={confirmDelete}
         title="게시물을 삭제하시겠어요?"
@@ -57,8 +61,24 @@ export function PostCard({ post, onDeleted }: PostCardProps) {
       />
 
       <div className="flex items-start justify-between gap-2 mb-2">
-        <div className="flex items-center gap-2 text-xs text-slate-500">
-          <span className="font-medium text-slate-700">{authorLabel}</span>
+        <div className="flex items-center gap-2 text-xs text-slate-500 flex-wrap">
+          {post.isPinned && <span className="text-blue-500 font-medium">📌</span>}
+          {/* Avatar */}
+          <span className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-500 overflow-hidden shrink-0">
+            {!isAnon && post.authorAvatar ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={post.authorAvatar} alt="" className="w-full h-full object-cover" />
+            ) : (
+              authorLabel.charAt(0).toUpperCase()
+            )}
+          </span>
+          {isAnon ? (
+            <span className="font-medium text-slate-700">{authorLabel}</span>
+          ) : (
+            <Link href={`/users/${post.authorId}`} className="font-medium text-slate-700 hover:text-blue-600">
+              {authorLabel}
+            </Link>
+          )}
           {post.createdAt && <span>{relativeTime(post.createdAt)}</span>}
           {flairLabel && (
             <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getFlairStyle(post.flair)}`}>

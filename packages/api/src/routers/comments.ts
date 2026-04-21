@@ -1,8 +1,14 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { router, publicProcedure, protectedProcedure } from '../trpc.js';
-import { db, comments, posts, notifications } from '@repo/db';
-import { eq, and, sql, desc } from 'drizzle-orm';
+import { db, comments, posts, notifications, profiles } from '@repo/db';
+import { eq, and, sql, desc, max, getTableColumns } from 'drizzle-orm';
+
+const commentSelect = {
+  ...getTableColumns(comments),
+  authorName: profiles.displayName,
+  authorAvatar: profiles.avatarUrl,
+};
 
 export const commentsRouter = router({
   /**
@@ -12,8 +18,9 @@ export const commentsRouter = router({
     .input(z.object({ postId: z.string() }))
     .query(async ({ input }) => {
       const allComments = await db
-        .select()
+        .select(commentSelect)
         .from(comments)
+        .leftJoin(profiles, eq(comments.authorId, profiles.id))
         .where(and(eq(comments.postId, input.postId), eq(comments.isDeleted, false)))
         .orderBy(desc(comments.createdAt));
 
@@ -59,6 +66,38 @@ export const commentsRouter = router({
         .where(eq(posts.id, input.postId))
         .limit(1);
 
+      // Determine anonNumber for Blind-style "같은 익명" tracking
+      let anonNumber: number | null = null;
+      if (input.isAnonymous) {
+        // Check if this user already commented anonymously on this post
+        const [existingAnon] = await db
+          .select({ anonNumber: comments.anonNumber })
+          .from(comments)
+          .where(and(
+            eq(comments.postId, input.postId),
+            eq(comments.authorId, ctx.userId),
+            eq(comments.isAnonymous, true),
+          ))
+          .limit(1);
+
+        if (existingAnon?.anonNumber != null) {
+          anonNumber = existingAnon.anonNumber;
+        } else if (post && post.authorId === ctx.userId) {
+          anonNumber = 0; // post author gets 0 → "글쓴이"
+        } else {
+          // Assign next sequential number among non-author anonymous commenters
+          const [{ maxNum }] = await db
+            .select({ maxNum: max(comments.anonNumber) })
+            .from(comments)
+            .where(and(
+              eq(comments.postId, input.postId),
+              eq(comments.isAnonymous, true),
+              sql`${comments.anonNumber} > 0`,
+            ));
+          anonNumber = (maxNum ?? 0) + 1;
+        }
+      }
+
       const [comment] = await db
         .insert(comments)
         .values({
@@ -67,6 +106,7 @@ export const commentsRouter = router({
           parentId: input.parentId ?? null,
           content: input.content,
           isAnonymous: input.isAnonymous,
+          anonNumber,
           depth: input.parentId ? 1 : 0,
         })
         .returning();
