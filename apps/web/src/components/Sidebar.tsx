@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { trpc } from '@/lib/trpc';
+import { useState } from 'react';
+import { ChannelRequestModal } from './ChannelRequestModal';
 
 interface SidebarProps {
   onNavigate?: () => void;
@@ -12,10 +14,12 @@ export function Sidebar({ onNavigate }: SidebarProps = {}) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const activeChannel = searchParams.get('channel');
+  const [showRequestModal, setShowRequestModal] = useState(false);
 
   const { data: channelsData } = trpc.channels.getList.useQuery({ limit: 50, offset: 0 });
   const { data: myChannelIds, refetch: refetchMemberships } =
     trpc.channels.getMyMemberships.useQuery();
+  const { data: isAdmin = false } = trpc.channels.isAdmin.useQuery();
 
   const join = trpc.channels.join.useMutation({ onSuccess: () => refetchMemberships() });
   const leave = trpc.channels.leave.useMutation({ onSuccess: () => refetchMemberships() });
@@ -28,6 +32,7 @@ export function Sidebar({ onNavigate }: SidebarProps = {}) {
 
   return (
     <aside className="w-56 shrink-0">
+      {showRequestModal && <ChannelRequestModal onClose={() => setShowRequestModal(false)} />}
       <div className="sticky top-20 space-y-4">
         <section className="rounded-lg border border-slate-200 bg-white">
           <div className="border-b border-slate-100 px-4 py-3">
@@ -51,6 +56,19 @@ export function Sidebar({ onNavigate }: SidebarProps = {}) {
               <span>전체 피드</span>
               <span className="text-xs text-slate-400">{totalPosts}</span>
             </Link>
+            {isAdmin && (
+              <Link
+                href="/admin/channels"
+                onClick={onNavigate}
+                className={`mt-1 flex items-center justify-between rounded-md px-3 py-2 text-sm hover:bg-slate-50 ${
+                  pathname === '/admin/channels'
+                    ? 'bg-blue-50 font-semibold text-blue-700'
+                    : 'text-slate-700'
+                }`}
+              >
+                <span>채널 신청 관리</span>
+              </Link>
+            )}
           </nav>
         </section>
 
@@ -73,6 +91,16 @@ export function Sidebar({ onNavigate }: SidebarProps = {}) {
           onToggle={(channelId) => join.mutate({ channelId })}
           toggleLabel="참여"
         />
+
+        <button
+          onClick={() => setShowRequestModal(true)}
+          className="w-full rounded-lg border border-dashed border-slate-300 bg-white px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+        >
+          채널 개설 신청
+          <span className="mt-1 block text-xs font-normal leading-5 text-slate-400">
+            관리자가 승인하면 새 채널이 열립니다.
+          </span>
+        </button>
       </div>
     </aside>
   );

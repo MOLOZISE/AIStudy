@@ -65,6 +65,35 @@ export const channels = pgTable(
 );
 
 // ============================================
+// Channel Requests
+// ============================================
+export const channelRequests = pgTable(
+  'channel_requests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: varchar('name', { length: 255 }).notNull(),
+    slug: varchar('slug', { length: 100 }).notNull(),
+    description: text('description'),
+    reason: text('reason'),
+    status: varchar('status', { length: 50 }).default('pending'),
+    requestedBy: uuid('requested_by')
+      .notNull()
+      .references(() => profiles.id),
+    reviewedBy: uuid('reviewed_by').references(() => profiles.id),
+    reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+    createdChannelId: uuid('created_channel_id').references(() => channels.id),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => {
+    return {
+      slugStatusIdx: index('idx_channel_requests_slug_status').on(table.slug, table.status),
+      requestedByIdx: index('idx_channel_requests_requested_by').on(table.requestedBy),
+      statusIdx: index('idx_channel_requests_status').on(table.status),
+    };
+  }
+);
+
+// ============================================
 // Posts
 // ============================================
 export const posts = pgTable(

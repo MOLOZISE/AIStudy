@@ -1,8 +1,40 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { router, publicProcedure, protectedProcedure } from '../trpc.js';
-import { db, channels, channelMembers } from '@repo/db';
+import { db, channels, channelMembers, channelRequests, profiles } from '@repo/db';
 import { eq, desc, and } from 'drizzle-orm';
+
+const DEFAULT_ADMIN_EMAILS = ['wchs0314@gmail.com'];
+
+function adminEmails() {
+  const configured = process.env.ADMIN_EMAILS?.split(',').map((email) => email.trim().toLowerCase()).filter(Boolean) ?? [];
+  return new Set([...DEFAULT_ADMIN_EMAILS, ...configured]);
+}
+
+async function assertAdmin(userId: string, authEmail?: string | null) {
+  const emailFromAuth = authEmail?.toLowerCase();
+  if (emailFromAuth && adminEmails().has(emailFromAuth)) return;
+
+  const [profile] = await db
+    .select({ email: profiles.email })
+    .from(profiles)
+    .where(eq(profiles.id, userId))
+    .limit(1);
+
+  if (!profile || !adminEmails().has(profile.email.toLowerCase())) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Admin only' });
+  }
+}
+
+function normalizeSlug(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9가-힣-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 100);
+}
 
 export const channelsRouter = router({
   /**
@@ -41,7 +73,180 @@ export const channelsRouter = router({
     }),
 
   /**
-   * Create a new channel
+   * Check whether the current user can review channel requests.
+   */
+  isAdmin: protectedProcedure.query(async ({ ctx }) => {
+    try {
+      await assertAdmin(ctx.userId, ctx.user?.email);
+      return true;
+    } catch {
+      return false;
+    }
+  }),
+
+  /**
+   * Request a new channel. Admin approval creates the actual channel.
+   */
+  requestCreate: protectedProcedure
+    .input(
+      z.object({
+        name: z.string().min(1).max(255),
+        slug: z.string().max(100).optional(),
+        description: z.string().max(1000).optional(),
+        reason: z.string().max(1000).optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const slug = normalizeSlug(input.slug || input.name);
+      if (!slug) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Channel slug is required' });
+      }
+
+      const [existingChannel] = await db
+        .select({ id: channels.id })
+        .from(channels)
+        .where(eq(channels.slug, slug))
+        .limit(1);
+      if (existingChannel) {
+        throw new TRPCError({ code: 'CONFLICT', message: '이미 사용 중인 채널 주소입니다.' });
+      }
+
+      const [pendingRequest] = await db
+        .select({ id: channelRequests.id })
+        .from(channelRequests)
+        .where(and(eq(channelRequests.slug, slug), eq(channelRequests.status, 'pending')))
+        .limit(1);
+      if (pendingRequest) {
+        throw new TRPCError({ code: 'CONFLICT', message: '이미 검토 중인 채널 신청입니다.' });
+      }
+
+      const [created] = await db
+        .insert(channelRequests)
+        .values({
+          name: input.name.trim(),
+          slug,
+          description: input.description?.trim() || null,
+          reason: input.reason?.trim() || null,
+          requestedBy: ctx.userId,
+        })
+        .returning();
+
+      return created;
+    }),
+
+  /**
+   * List channel requests for admins.
+   */
+  getRequests: protectedProcedure
+    .input(
+      z.object({
+        status: z.enum(['pending', 'approved', 'rejected']).optional(),
+        limit: z.number().min(1).max(100).default(50),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      await assertAdmin(ctx.userId, ctx.user?.email);
+
+      const rows = await db
+        .select({
+          id: channelRequests.id,
+          name: channelRequests.name,
+          slug: channelRequests.slug,
+          description: channelRequests.description,
+          reason: channelRequests.reason,
+          status: channelRequests.status,
+          requestedBy: channelRequests.requestedBy,
+          requesterName: profiles.displayName,
+          requesterEmail: profiles.email,
+          reviewedBy: channelRequests.reviewedBy,
+          reviewedAt: channelRequests.reviewedAt,
+          createdChannelId: channelRequests.createdChannelId,
+          createdAt: channelRequests.createdAt,
+        })
+        .from(channelRequests)
+        .leftJoin(profiles, eq(channelRequests.requestedBy, profiles.id))
+        .where(input.status ? eq(channelRequests.status, input.status) : undefined)
+        .orderBy(desc(channelRequests.createdAt))
+        .limit(input.limit);
+
+      return rows;
+    }),
+
+  /**
+   * Approve a channel request and create the channel.
+   */
+  approveRequest: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      await assertAdmin(ctx.userId, ctx.user?.email);
+
+      const [request] = await db
+        .select()
+        .from(channelRequests)
+        .where(eq(channelRequests.id, input.id))
+        .limit(1);
+
+      if (!request) throw new TRPCError({ code: 'NOT_FOUND', message: 'Channel request not found' });
+      if (request.status !== 'pending') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: '이미 처리된 신청입니다.' });
+      }
+
+      const [existingChannel] = await db
+        .select({ id: channels.id })
+        .from(channels)
+        .where(eq(channels.slug, request.slug))
+        .limit(1);
+      if (existingChannel) {
+        throw new TRPCError({ code: 'CONFLICT', message: '이미 사용 중인 채널 주소입니다.' });
+      }
+
+      const [channel] = await db
+        .insert(channels)
+        .values({
+          name: request.name,
+          slug: request.slug,
+          description: request.description,
+          createdBy: request.requestedBy,
+          memberCount: 1,
+        })
+        .returning();
+
+      await db
+        .insert(channelMembers)
+        .values({ channelId: channel.id, userId: request.requestedBy, role: 'admin' })
+        .onConflictDoNothing();
+
+      await db
+        .update(channelRequests)
+        .set({
+          status: 'approved',
+          reviewedBy: ctx.userId,
+          reviewedAt: new Date(),
+          createdChannelId: channel.id,
+        })
+        .where(eq(channelRequests.id, input.id));
+
+      return channel;
+    }),
+
+  /**
+   * Reject a channel request.
+   */
+  rejectRequest: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      await assertAdmin(ctx.userId, ctx.user?.email);
+
+      await db
+        .update(channelRequests)
+        .set({ status: 'rejected', reviewedBy: ctx.userId, reviewedAt: new Date() })
+        .where(and(eq(channelRequests.id, input.id), eq(channelRequests.status, 'pending')));
+
+      return { success: true };
+    }),
+
+  /**
+   * Admin-only direct channel creation.
    */
   create: protectedProcedure
     .input(
@@ -51,18 +256,21 @@ export const channelsRouter = router({
           .string()
           .min(1)
           .max(100)
-          .regex(/^[a-z0-9-]+$/, 'Slug must be lowercase letters, numbers, or hyphens'),
+          .regex(/^[a-z0-9가-힣-]+$/, 'Slug must be letters, numbers, Korean characters, or hyphens'),
         description: z.string().max(1000).optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
+      await assertAdmin(ctx.userId, ctx.user?.email);
+
       const [created] = await db
         .insert(channels)
-        .values({ ...input, createdBy: ctx.userId })
+        .values({ ...input, slug: normalizeSlug(input.slug), createdBy: ctx.userId, memberCount: 1 })
         .returning();
       await db
         .insert(channelMembers)
-        .values({ channelId: created.id, userId: ctx.userId, role: 'admin' });
+        .values({ channelId: created.id, userId: ctx.userId, role: 'admin' })
+        .onConflictDoNothing();
       return created;
     }),
 
