@@ -4,9 +4,12 @@ import { use, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { trpc } from '@/lib/trpc';
 import { useAuthStore } from '@/store/auth';
+import { VoteButton } from '@/components/VoteButton';
+import { CommentSection } from '@/components/CommentSection';
 
-function relativeTime(date: Date): string {
-  const diffMs = Date.now() - date.getTime();
+function relativeTime(date: Date | string | null): string {
+  if (!date) return '';
+  const diffMs = Date.now() - new Date(date).getTime();
   const diffMin = Math.floor(diffMs / 60000);
   if (diffMin < 1) return '방금';
   if (diffMin < 60) return `${diffMin}분 전`;
@@ -25,6 +28,11 @@ export default function PostDetailPage({ params }: { params: Promise<{ postId: s
   const deletePost = trpc.posts.delete.useMutation({
     onSuccess: () => router.push('/feed'),
   });
+
+  const myVoteQuery = trpc.votes.getMyVote.useQuery(
+    { targetType: 'post', targetId: postId },
+    { enabled: !!user }
+  );
 
   useEffect(() => {
     if (postId) incrementView.mutate({ id: postId });
@@ -48,7 +56,7 @@ export default function PostDetailPage({ params }: { params: Promise<{ postId: s
         <div>
           <div className="flex items-center gap-2 text-sm text-slate-500 mb-2">
             <span className="font-medium text-slate-800">{authorLabel}</span>
-            {post.createdAt && <span>{relativeTime(new Date(post.createdAt))}</span>}
+            {post.createdAt && <span>{relativeTime(post.createdAt)}</span>}
           </div>
           {post.title && (
             <h1 className="text-2xl font-bold text-slate-900">{post.title}</h1>
@@ -76,15 +84,19 @@ export default function PostDetailPage({ params }: { params: Promise<{ postId: s
         </div>
       )}
 
-      <div className="flex items-center gap-4 mt-6 pt-4 border-t border-slate-100 text-sm text-slate-400">
-        <span>↑ {post.upvoteCount ?? 0}</span>
-        <span>💬 {post.commentCount ?? 0}</span>
-        <span>👁 {post.viewCount ?? 0}</span>
+      <div className="flex items-center gap-4 mt-6 pt-4 border-t border-slate-100">
+        <VoteButton
+          targetType="post"
+          targetId={post.id}
+          upvoteCount={post.upvoteCount ?? 0}
+          downvoteCount={post.downvoteCount ?? 0}
+          currentVote={myVoteQuery.data ?? null}
+        />
+        <span className="text-sm text-slate-400">💬 {post.commentCount ?? 0}</span>
+        <span className="text-sm text-slate-400">👁 {post.viewCount ?? 0}</span>
       </div>
 
-      <div className="mt-6 pt-6 border-t border-slate-100">
-        <p className="text-sm text-slate-400">댓글 기능은 Week 4에서 추가됩니다.</p>
-      </div>
+      <CommentSection postId={postId} />
     </article>
   );
 }
