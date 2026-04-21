@@ -90,7 +90,7 @@ export default function PostDetailPage({ params }: { params: Promise<{ postId: s
           targetId={post.id}
           upvoteCount={post.upvoteCount ?? 0}
           downvoteCount={post.downvoteCount ?? 0}
-          currentVote={myVoteQuery.data ?? null}
+          currentVote={(myVoteQuery.data as 'up' | 'down' | null) ?? null}
         />
         <span className="text-sm text-slate-400">💬 {post.commentCount ?? 0}</span>
         <span className="text-sm text-slate-400">👁 {post.viewCount ?? 0}</span>

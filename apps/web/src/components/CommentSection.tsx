@@ -75,7 +75,7 @@ function CommentItem({ comment, postId, isReply = false }: CommentItemProps) {
             targetType="comment"
             targetId={comment.id}
             upvoteCount={comment.upvoteCount ?? 0}
-            currentVote={myVoteQuery.data ?? null}
+            currentVote={(myVoteQuery.data as 'up' | 'down' | null) ?? null}
           />
           {!isReply && (
             <button
