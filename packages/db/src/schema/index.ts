@@ -8,9 +8,9 @@ import {
   varchar,
   uniqueIndex,
   index,
-  foreignKey,
   numeric,
   jsonb,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 
 // ============================================
@@ -19,7 +19,7 @@ import {
 export const profiles = pgTable(
   'profiles',
   {
-    id: uuid('id').primaryKey().references(() => ({}, { relationName: 'auth.users' }),
+    id: uuid('id').primaryKey(),
     email: varchar('email', { length: 255 }).notNull().unique(),
     displayName: varchar('display_name', { length: 255 }).notNull(),
     department: varchar('department', { length: 255 }),
@@ -27,7 +27,7 @@ export const profiles = pgTable(
     avatarUrl: text('avatar_url'),
     trustScore: integer('trust_score').default(36),
     isVerified: boolean('is_verified').default(false),
-    anonymousSeed: uuid('anonymous_seed').default((() => crypto.randomUUID?.() || '')),
+    anonymousSeed: uuid('anonymous_seed').defaultRandom(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   },
@@ -119,7 +119,7 @@ export const comments = pgTable(
     authorId: uuid('author_id')
       .notNull()
       .references(() => profiles.id),
-    parentId: uuid('parent_id').references(() => comments.id),
+    parentId: uuid('parent_id').references((): AnyPgColumn => comments.id),
     isAnonymous: boolean('is_anonymous').default(false),
     anonNumber: integer('anon_number'),
     content: text('content').notNull(),

@@ -1,4 +1,4 @@
-'use client';
+import Link from 'next/link';
 
 export default function Home() {
   return (
@@ -6,15 +6,21 @@ export default function Home() {
       <div className="text-center">
         <h1 className="text-4xl font-bold text-slate-900 mb-4">Company Community</h1>
         <p className="text-lg text-slate-600 mb-8">
-          A safe space for real and anonymous workplace discussions
+          실명·익명으로 자유롭게 소통하는 사내 커뮤니티
         </p>
         <div className="space-x-4">
-          <button className="px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
-            Sign In
-          </button>
-          <button className="px-6 py-3 bg-slate-200 text-slate-900 rounded-lg hover:bg-slate-300">
-            Sign Up
-          </button>
+          <Link
+            href="/login"
+            className="inline-block px-6 py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-medium"
+          >
+            로그인
+          </Link>
+          <Link
+            href="/signup"
+            className="inline-block px-6 py-3 bg-slate-200 text-slate-900 rounded-lg hover:bg-slate-300 font-medium"
+          >
+            회원가입
+          </Link>
         </div>
       </div>
     </main>

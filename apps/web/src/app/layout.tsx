@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import '../styles/globals.css';
+import { TRPCProvider } from '@/components/TRPCProvider';
+import { AuthProvider } from '@/components/AuthProvider';
 
 export const metadata: Metadata = {
   title: 'Company Community',
@@ -8,8 +10,12 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body className="bg-white text-slate-900">{children}</body>
+    <html lang="ko">
+      <body className="bg-white text-slate-900">
+        <TRPCProvider>
+          <AuthProvider>{children}</AuthProvider>
+        </TRPCProvider>
+      </body>
     </html>
   );
 }

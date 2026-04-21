@@ -15,7 +15,7 @@ export async function createContext(opts?: FetchCreateContextFnOptions) {
 
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.slice(7);
-    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+    const supabase = createClient(supabaseUrl!, supabaseAnonKey!);
 
     const {
       data: { user: authUser },

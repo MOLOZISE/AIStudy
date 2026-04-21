@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { router, publicProcedure, protectedProcedure } from '../trpc.js';
-import { db, posts, channels } from '@repo/db';
-import { eq, desc } from 'drizzle-orm';
+import { db, posts } from '@repo/db';
+import { eq, desc, and } from 'drizzle-orm';
 
 export const postsRouter = router({
   /**
@@ -17,25 +17,24 @@ export const postsRouter = router({
       })
     )
     .query(async ({ input }) => {
-      let query = db.select().from(posts).where(eq(posts.isDeleted, false));
+      const whereClause = input.channelId
+        ? and(eq(posts.isDeleted, false), eq(posts.channelId, input.channelId))
+        : eq(posts.isDeleted, false);
 
-      if (input.channelId) {
-        query = query.where(eq(posts.channelId, input.channelId));
-      }
+      const orderCol =
+        input.sort === 'new'
+          ? desc(posts.createdAt)
+          : input.sort === 'top'
+            ? desc(posts.upvoteCount)
+            : desc(posts.hotScore);
 
-      switch (input.sort) {
-        case 'hot':
-          query = query.orderBy(desc(posts.hotScore));
-          break;
-        case 'new':
-          query = query.orderBy(desc(posts.createdAt));
-          break;
-        case 'top':
-          query = query.orderBy(desc(posts.upvoteCount));
-          break;
-      }
-
-      const items = await query.limit(input.limit).offset(input.offset);
+      const items = await db
+        .select()
+        .from(posts)
+        .where(whereClause)
+        .orderBy(orderCol)
+        .limit(input.limit)
+        .offset(input.offset);
 
       return {
         items,
