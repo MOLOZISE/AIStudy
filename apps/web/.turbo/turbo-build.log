@@ -1,0 +1,37 @@
+
+> @repo/web@0.1.0 build C:\Users\user\Downloads\agent\company-community\apps\web
+> next build
+
+   ▲ Next.js 15.5.15
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 2.5s
+   Linting and checking validity of types ...
+ ⨯ ESLint: Invalid Options: - Unknown options: useEslintrc, extensions - 'extensions' has been removed.
+   Collecting page data ...
+   Generating static pages (0/8) ...
+   Generating static pages (2/8) 
+   Generating static pages (4/8) 
+   Generating static pages (6/8) 
+ ✓ Generating static pages (8/8)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                 Size  First Load JS
+┌ ○ /                                    2.02 kB         108 kB
+├ ○ /_not-found                            989 B         103 kB
+├ ƒ /api/trpc/[trpc]                       123 B         102 kB
+├ ○ /feed                                4.74 kB         184 kB
+├ ○ /login                               1.02 kB         164 kB
+├ ƒ /posts/[postId]                      2.41 kB         121 kB
+├ ○ /profile                             1.09 kB         119 kB
+└ ○ /signup                              1.45 kB         181 kB
++ First Load JS shared by all             102 kB
+  ├ chunks/495ed1de-ef13b73ea9667117.js  54.2 kB
+  ├ chunks/780-ba70085d857d4d82.js         46 kB
+  └ other shared chunks (total)          1.99 kB
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

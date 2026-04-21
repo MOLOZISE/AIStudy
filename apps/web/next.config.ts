@@ -2,8 +2,7 @@ import type { NextConfig } from 'next';
 
 const config: NextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
-  transpilePackages: ['@repo/api', '@repo/db', '@repo/types', '@repo/ui'],
+  transpilePackages: ['@repo/api', '@repo/db', '@repo/types'],
   images: {
     remotePatterns: [
       {
@@ -11,6 +10,14 @@ const config: NextConfig = {
         hostname: '**.supabase.co',
       },
     ],
+  },
+  webpack: (config) => {
+    // Resolve .js imports to .ts source files in workspace packages
+    config.resolve.extensionAlias = {
+      '.js': ['.ts', '.js'],
+      '.jsx': ['.tsx', '.jsx'],
+    };
+    return config;
   },
 };
 
