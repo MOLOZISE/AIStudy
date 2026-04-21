@@ -32,8 +32,10 @@ export function ProfileForm() {
       setDepartment(profile.department ?? '');
       setJobTitle(profile.jobTitle ?? '');
       setAvatarPreview(profile.avatarUrl ?? null);
+    } else if (user?.email) {
+      setDisplayName((prev) => prev || user.email?.split('@')[0] || '');
     }
-  }, [profile]);
+  }, [profile, user?.email]);
 
   const handleAvatarChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -83,11 +85,17 @@ export function ProfileForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {!profile && (
+        <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+          아직 프로필이 없어요. 이름만 입력해서 저장하면 바로 생성됩니다.
+        </div>
+      )}
+
       {/* Avatar */}
       <div className="flex items-center gap-4">
         <Avatar
           src={avatarPreview}
-          name={displayName || '?'}
+          name={displayName || user?.email?.split('@')[0] || '?'}
           size="lg"
           onClick={() => fileRef.current?.click()}
           title="아바타 변경"

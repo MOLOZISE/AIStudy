@@ -15,11 +15,7 @@ export const authRouter = router({
       .where(eq(profiles.id, ctx.userId))
       .limit(1);
 
-    if (!profile) {
-      throw new TRPCError({ code: 'NOT_FOUND', message: 'Profile not found' });
-    }
-
-    return profile;
+    return profile ?? null;
   }),
 
   /**
@@ -112,16 +108,41 @@ export const authRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const [updated] = await db
-        .update(profiles)
-        .set({ ...input, updatedAt: new Date() })
+      const [existing] = await db
+        .select()
+        .from(profiles)
         .where(eq(profiles.id, ctx.userId))
-        .returning();
+        .limit(1);
 
-      if (!updated) {
-        throw new TRPCError({ code: 'NOT_FOUND', message: 'Profile not found' });
+      if (existing) {
+        const [updated] = await db
+          .update(profiles)
+          .set({ ...input, updatedAt: new Date() })
+          .where(eq(profiles.id, ctx.userId))
+          .returning();
+
+        return updated;
       }
 
-      return updated;
+      const email = ctx.user?.email?.trim();
+      if (!email) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Email is required to create a profile' });
+      }
+
+      const displayName = input.displayName?.trim() || email.split('@')[0] || 'User';
+
+      const [created] = await db
+        .insert(profiles)
+        .values({
+          id: ctx.userId,
+          email,
+          displayName,
+          department: input.department,
+          jobTitle: input.jobTitle,
+          avatarUrl: input.avatarUrl ?? null,
+        })
+        .returning();
+
+      return created;
     }),
 });
