@@ -1,7 +1,19 @@
 import { z } from 'zod';
+import { TRPCError } from '@trpc/server';
 import { router, publicProcedure, protectedProcedure } from '../trpc.js';
 import { db, posts } from '@repo/db';
-import { eq, desc, and } from 'drizzle-orm';
+import { eq, desc, and, sql } from 'drizzle-orm';
+
+const ANON_ANIMALS = [
+  '강아지', '고양이', '토끼', '사자', '호랑이', '곰', '여우', '늑대', '코끼리', '기린',
+  '펭귄', '오리', '독수리', '두더지', '너구리', '수달', '고슴도치', '다람쥐',
+];
+
+function generateAnonAlias(): string {
+  const animal = ANON_ANIMALS[Math.floor(Math.random() * ANON_ANIMALS.length)];
+  const num = Math.floor(Math.random() * 100);
+  return `익명${animal}${num}`;
+}
 
 export const postsRouter = router({
   /**
@@ -36,10 +48,7 @@ export const postsRouter = router({
         .limit(input.limit)
         .offset(input.offset);
 
-      return {
-        items,
-        hasMore: items.length === input.limit,
-      };
+      return { items, hasMore: items.length === input.limit };
     }),
 
   /**
@@ -48,12 +57,14 @@ export const postsRouter = router({
   getById: publicProcedure
     .input(z.object({ id: z.string() }))
     .query(async ({ input }) => {
-      const post = await db.query.posts.findFirst({
-        where: eq(posts.id, input.id),
-      });
+      const [post] = await db
+        .select()
+        .from(posts)
+        .where(eq(posts.id, input.id))
+        .limit(1);
 
       if (!post || post.isDeleted) {
-        throw new Error('Post not found');
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'Post not found' });
       }
 
       return post;
@@ -74,42 +85,52 @@ export const postsRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const post = await db
+      const [post] = await db
         .insert(posts)
         .values({
           channelId: input.channelId,
-          authorId: ctx.userId!,
+          authorId: ctx.userId,
           title: input.title,
           content: input.content,
           isAnonymous: input.isAnonymous,
+          anonAlias: input.isAnonymous ? generateAnonAlias() : null,
           mediaUrls: input.mediaUrls,
           flair: input.flair,
         })
         .returning();
-
-      return post[0];
+      return post;
     }),
 
   /**
-   * Delete post (owner only)
+   * Delete post (owner only, soft delete)
    */
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ input, ctx }) => {
-      const post = await db.query.posts.findFirst({
-        where: eq(posts.id, input.id),
-      });
+      const [post] = await db
+        .select()
+        .from(posts)
+        .where(eq(posts.id, input.id))
+        .limit(1);
 
-      if (!post) {
-        throw new Error('Post not found');
-      }
-
-      if (post.authorId !== ctx.userId) {
-        throw new Error('Unauthorized');
-      }
+      if (!post) throw new TRPCError({ code: 'NOT_FOUND', message: 'Post not found' });
+      if (post.authorId !== ctx.userId)
+        throw new TRPCError({ code: 'FORBIDDEN', message: 'Not your post' });
 
       await db.update(posts).set({ isDeleted: true }).where(eq(posts.id, input.id));
+      return { success: true };
+    }),
 
+  /**
+   * Increment view count (fire-and-forget, unauthenticated)
+   */
+  incrementViewCount: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ input }) => {
+      await db
+        .update(posts)
+        .set({ viewCount: sql`${posts.viewCount} + 1` })
+        .where(eq(posts.id, input.id));
       return { success: true };
     }),
 });
