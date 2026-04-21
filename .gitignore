@@ -1,0 +1,36 @@
+# Dependencies
+node_modules
+pnpm-lock.yaml
+.pnpm-debug.log
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Build outputs
+.next
+dist
+out
+build
+
+# Editor/IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS
+Thumbs.db
+
+# Testing
+coverage
+.nyc_output
+
+# Vercel
+.vercel
+
+# Database
+.drizzle
