@@ -10,6 +10,17 @@ interface SidebarProps {
   onNavigate?: () => void;
 }
 
+type ChannelItem = {
+  id: string;
+  slug: string;
+  name: string;
+  type: string | null;
+  purpose: string | null;
+  postingMode: string | null;
+  scope: string | null;
+  displayOrder: number | null;
+};
+
 export function Sidebar({ onNavigate }: SidebarProps = {}) {
   const pathname = usePathname();
   const [showRequestModal, setShowRequestModal] = useState(false);
@@ -20,60 +31,128 @@ export function Sidebar({ onNavigate }: SidebarProps = {}) {
   const { data: isAdmin = false } = trpc.channels.isAdmin.useQuery();
 
   const leave = trpc.channels.leave.useMutation({ onSuccess: () => refetchMemberships() });
+  const join = trpc.channels.join.useMutation({ onSuccess: () => refetchMemberships() });
 
-  const boards = boardsData?.items ?? [];
-  const spaces = spacesData?.items ?? [];
-  const myBoards = boards.filter((b) => myChannelIds?.includes(b.id));
+  const boards = (boardsData?.items ?? []) as ChannelItem[];
+  const spaces = (spacesData?.items ?? []) as ChannelItem[];
+
+  // Board taxonomy grouping
+  const noticeBoards = boards.filter((b) => b.purpose === 'announcement');
+  const anonBoards = boards.filter((b) => b.postingMode === 'anonymous_only');
+  const generalBoards = boards.filter(
+    (b) => b.purpose !== 'announcement' && b.postingMode !== 'anonymous_only'
+  );
+
   const mySpaces = spaces.filter((s) => myChannelIds?.includes(s.id));
+  const otherSpaces = spaces.filter((s) => !myChannelIds?.includes(s.id));
 
-  function isActive(href: string) {
-    return pathname === href;
+  function isMember(id: string) {
+    return myChannelIds?.includes(id) ?? false;
+  }
+
+  function boardPath(slug: string) {
+    return `/boards/${slug}`;
+  }
+  function spacePath(slug: string) {
+    return `/spaces/${slug}`;
   }
 
   return (
     <aside className="w-56 shrink-0">
       {showRequestModal && <ChannelRequestModal onClose={() => setShowRequestModal(false)} />}
-      <div className="sticky top-20 space-y-1">
+      <div className="sticky top-20 space-y-1 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 6rem)' }}>
 
-        {/* 게시판 섹션 */}
-        <NavSection label="게시판">
-          <NavLink href="/boards" active={isActive('/boards')} onClick={onNavigate}>
-            커뮤니티 게시판
-          </NavLink>
-          {myBoards.map((board) => (
-            <NavLink
-              key={board.id}
-              href={`/boards/${board.slug}`}
-              active={pathname === `/boards/${board.slug}`}
-              onClick={onNavigate}
-              onLeave={() => leave.mutate({ channelId: board.id })}
-            >
-              # {board.name}
+        {/* 공지 / 필독 */}
+        {noticeBoards.length > 0 && (
+          <NavSection label="📌 공지 / 필독">
+            {noticeBoards.map((b) => (
+              <NavLink
+                key={b.id}
+                href={boardPath(b.slug)}
+                active={pathname === boardPath(b.slug)}
+                onClick={onNavigate}
+              >
+                {b.name}
+              </NavLink>
+            ))}
+          </NavSection>
+        )}
+
+        {/* 공통 게시판 */}
+        {generalBoards.length > 0 && (
+          <NavSection label="🗂 게시판">
+            <NavLink href="/boards" active={pathname === '/boards'} onClick={onNavigate}>
+              전체 게시판
             </NavLink>
-          ))}
-        </NavSection>
+            {generalBoards.map((b) => (
+              <NavLink
+                key={b.id}
+                href={boardPath(b.slug)}
+                active={pathname === boardPath(b.slug)}
+                onClick={onNavigate}
+                joined={isMember(b.id)}
+                onJoinLeave={() =>
+                  isMember(b.id)
+                    ? leave.mutate({ channelId: b.id })
+                    : join.mutate({ channelId: b.id })
+                }
+              >
+                # {b.name}
+              </NavLink>
+            ))}
+          </NavSection>
+        )}
 
-        {/* 공간 섹션 */}
-        <NavSection label="내 공간">
-          <NavLink href="/spaces" active={isActive('/spaces')} onClick={onNavigate}>
+        {/* 익명 게시판 */}
+        {anonBoards.length > 0 && (
+          <NavSection label="🔒 익명 게시판">
+            {anonBoards.map((b) => (
+              <NavLink
+                key={b.id}
+                href={boardPath(b.slug)}
+                active={pathname === boardPath(b.slug)}
+                onClick={onNavigate}
+              >
+                {b.name}
+              </NavLink>
+            ))}
+          </NavSection>
+        )}
+
+        {/* 내 공간 */}
+        <NavSection label="🚀 내 공간">
+          <NavLink href="/spaces" active={pathname === '/spaces'} onClick={onNavigate}>
             공간 탐색
           </NavLink>
-          {mySpaces.map((space) => (
+          {mySpaces.map((s) => (
             <NavLink
-              key={space.id}
-              href={`/spaces/${space.slug}`}
-              active={pathname === `/spaces/${space.slug}`}
+              key={s.id}
+              href={spacePath(s.slug)}
+              active={pathname === spacePath(s.slug)}
               onClick={onNavigate}
-              onLeave={() => leave.mutate({ channelId: space.id })}
+              joined
+              onJoinLeave={() => leave.mutate({ channelId: s.id })}
             >
-              · {space.name}
+              · {s.name}
+            </NavLink>
+          ))}
+          {otherSpaces.slice(0, 3).map((s) => (
+            <NavLink
+              key={s.id}
+              href={spacePath(s.slug)}
+              active={pathname === spacePath(s.slug)}
+              onClick={onNavigate}
+              joined={false}
+              onJoinLeave={() => join.mutate({ channelId: s.id })}
+            >
+              · {s.name}
             </NavLink>
           ))}
         </NavSection>
 
-        {/* 관리자 링크 */}
+        {/* 관리자 */}
         {isAdmin && (
-          <NavSection label="관리">
+          <NavSection label="⚙ 관리">
             <NavLink href="/admin/channels" active={pathname === '/admin/channels'} onClick={onNavigate}>
               채널 신청 관리
             </NavLink>
@@ -83,17 +162,16 @@ export function Sidebar({ onNavigate }: SidebarProps = {}) {
           </NavSection>
         )}
 
-        {/* 모아보기 (피드) — 하단 보조 */}
-        <div className="pt-1 border-t border-slate-200">
-          <NavLink href="/feed" active={isActive('/feed')} onClick={onNavigate} muted>
-            모아보기
+        {/* 모아보기 — 하단 보조 */}
+        <div className="border-t border-slate-200 pt-1">
+          <NavLink href="/feed" active={pathname === '/feed'} onClick={onNavigate} muted>
+            📰 모아보기
           </NavLink>
         </div>
 
-        {/* 공간/채널 개설 신청 */}
         <button
           onClick={() => setShowRequestModal(true)}
-          className="w-full rounded-lg border border-dashed border-slate-300 bg-white px-4 py-3 text-left text-sm font-medium text-slate-500 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+          className="w-full rounded-lg border border-dashed border-slate-300 bg-white px-3 py-2.5 text-left text-sm font-medium text-slate-500 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
         >
           + 게시판 / 공간 개설 신청
         </button>
@@ -105,7 +183,7 @@ export function Sidebar({ onNavigate }: SidebarProps = {}) {
 function NavSection({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <section className="rounded-lg border border-slate-200 bg-white py-2">
-      <p className="px-3 pb-1 pt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+      <p className="px-3 pb-1 pt-1 text-xs font-semibold tracking-wide text-slate-400">{label}</p>
       <nav className="px-1">{children}</nav>
     </section>
   );
@@ -115,14 +193,16 @@ function NavLink({
   href,
   active,
   onClick,
-  onLeave,
+  onJoinLeave,
+  joined,
   muted,
   children,
 }: {
   href: string;
   active: boolean;
   onClick?: () => void;
-  onLeave?: () => void;
+  onJoinLeave?: () => void;
+  joined?: boolean;
   muted?: boolean;
   children: React.ReactNode;
 }) {
@@ -141,13 +221,17 @@ function NavLink({
       >
         {children}
       </Link>
-      {onLeave && (
+      {onJoinLeave !== undefined && (
         <button
-          onClick={onLeave}
-          className="pr-2 text-xs text-slate-300 opacity-0 hover:text-red-400 group-hover:opacity-100"
-          title="나가기"
+          onClick={onJoinLeave}
+          className={`mr-1 rounded px-1.5 py-0.5 text-xs opacity-0 group-hover:opacity-100 ${
+            joined
+              ? 'text-slate-300 hover:text-red-400'
+              : 'text-slate-400 hover:bg-blue-50 hover:text-blue-600'
+          }`}
+          title={joined ? '나가기' : '참여'}
         >
-          ✕
+          {joined ? '✕' : '+'}
         </button>
       )}
     </div>
