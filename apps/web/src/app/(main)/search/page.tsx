@@ -30,21 +30,21 @@ export default function SearchPage({
   const usersQuery = trpc.auth.search.useQuery({ q: query }, { enabled: hasQuery });
 
   const tabs: Array<{ key: Tab; label: string }> = [
-    { key: 'posts', label: 'Posts' },
-    { key: 'channels', label: 'Channels' },
-    { key: 'users', label: 'Users' },
+    { key: 'posts', label: '글' },
+    { key: 'channels', label: '게시판 / 공간' },
+    { key: 'users', label: '사람' },
   ];
 
   return (
     <div className="space-y-6">
       <section className="rounded-xl border border-slate-200 bg-white p-6">
-        <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Search</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">검색</p>
         <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950">
-          {hasQuery ? `Search results for "${query}"` : 'Search something'}
+          {hasQuery ? `"${query}" 검색 결과` : '무엇이든 검색해보세요'}
         </h1>
         {!hasQuery && (
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Search posts, channels, and users from one place.
+            게시글, 게시판/공간, 사람을 한 곳에서 찾아보세요.
           </p>
         )}
       </section>
@@ -76,7 +76,7 @@ export default function SearchPage({
               isEmpty={!postsQuery.data?.length}
               errorMessage={postsQuery.error?.message}
               loadingFallback={<PostSkeletonList />}
-              emptyLabel={hasQuery ? 'No results found.' : 'Type something to see post results.'}
+              emptyLabel={hasQuery ? '검색 결과가 없습니다.' : '검색어를 입력하면 글 결과가 표시됩니다.'}
             >
               <div className="space-y-3">
                 {postsQuery.data?.map((post) => (
@@ -105,7 +105,7 @@ export default function SearchPage({
               isEmpty={!channelsQuery.data?.length}
               errorMessage={channelsQuery.error?.message}
               loadingFallback={<ChannelSkeletonList />}
-              emptyLabel={hasQuery ? 'No results found.' : 'Type something to see channel results.'}
+              emptyLabel={hasQuery ? '검색 결과가 없습니다.' : '검색어를 입력하면 게시판/공간 결과가 표시됩니다.'}
             >
               <div className="space-y-3">
                 {channelsQuery.data?.map((channel) => (
@@ -118,11 +118,11 @@ export default function SearchPage({
                       <div className="min-w-0">
                         <h2 className="text-base font-semibold text-slate-950">#{channel.name}</h2>
                         <p className="mt-1 text-sm leading-6 text-slate-600 line-clamp-2">
-                          {channel.description ?? 'No description'}
+                          {channel.description ?? '설명 없음'}
                         </p>
                       </div>
                       <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-                        Members {channel.memberCount}
+                        {channel.memberCount}명
                       </span>
                     </div>
                   </Link>
@@ -137,7 +137,7 @@ export default function SearchPage({
               isEmpty={!usersQuery.data?.length}
               errorMessage={usersQuery.error?.message}
               loadingFallback={<UserSkeletonList />}
-              emptyLabel={hasQuery ? 'No results found.' : 'Type something to see user results.'}
+              emptyLabel={hasQuery ? '검색 결과가 없습니다.' : '검색어를 입력하면 사람 결과가 표시됩니다.'}
             >
               <div className="space-y-3">
                 {usersQuery.data?.map((user) => (
@@ -151,7 +151,7 @@ export default function SearchPage({
                       <div className="min-w-0">
                         <h2 className="text-base font-semibold text-slate-950">{user.displayName}</h2>
                         <p className="mt-1 text-sm text-slate-600">
-                          {user.department ?? 'No department'}
+                          {user.department ?? '부서 미입력'}
                           {user.jobTitle ? ` - ${user.jobTitle}` : ''}
                         </p>
                       </div>
@@ -199,7 +199,7 @@ function EmptyState({ label }: { label: string }) {
 function ErrorState({ label }: { label: string }) {
   return (
     <div className="flex min-h-[160px] items-center justify-center rounded-lg border border-rose-200 bg-rose-50 px-4 py-8">
-      <p className="text-sm text-rose-700">{label || 'Something went wrong while searching.'}</p>
+      <p className="text-sm text-rose-700">{label || '검색 중 오류가 발생했습니다.'}</p>
     </div>
   );
 }

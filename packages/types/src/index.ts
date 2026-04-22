@@ -14,6 +14,13 @@ export interface Profile {
 }
 
 // Channels
+export type ChannelType = 'board' | 'space';
+export type ChannelScope = 'company' | 'subsidiary' | 'department' | 'project' | 'interest';
+export type ChannelPostingMode = 'real_only' | 'anonymous_allowed' | 'anonymous_only';
+export type ChannelMembershipType = 'open' | 'request' | 'invite';
+export type ChannelDefaultSort = 'latest' | 'hot' | 'pinned';
+export type ChannelPurpose = 'discussion' | 'knowledge' | 'announcement' | 'social';
+
 export interface Channel {
   id: string;
   slug: string;
@@ -25,6 +32,16 @@ export interface Channel {
   postCount: number;
   createdBy: string;
   createdAt: Date;
+  // board/space pivot metadata
+  type: ChannelType;
+  scope: ChannelScope;
+  postingMode: ChannelPostingMode;
+  membershipType: ChannelMembershipType;
+  isListed: boolean;
+  parentId?: string;
+  defaultSort: ChannelDefaultSort;
+  purpose: ChannelPurpose;
+  displayOrder: number;
 }
 
 // Posts

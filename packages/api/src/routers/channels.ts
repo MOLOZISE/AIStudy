@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { router, publicProcedure, protectedProcedure, assertAdmin } from '../trpc.js';
 import { db, channels, channelMembers, channelRequests, profiles } from '@repo/db';
-import { eq, desc, and, sql, ilike, or } from 'drizzle-orm';
+import { eq, desc, and, sql, ilike, or, asc } from 'drizzle-orm';
 
 function normalizeSlug(value: string) {
   return value
@@ -16,20 +16,23 @@ function normalizeSlug(value: string) {
 
 export const channelsRouter = router({
   /**
-   * List all channels ordered by member count
+   * List channels, optionally filtered by type (board | space)
    */
   getList: publicProcedure
     .input(
       z.object({
         limit: z.number().min(1).max(100).default(50),
         offset: z.number().min(0).default(0),
+        type: z.enum(['board', 'space']).optional(),
       })
     )
     .query(async ({ input }) => {
+      const where = input.type ? eq(channels.type, input.type) : undefined;
       const items = await db
         .select()
         .from(channels)
-        .orderBy(desc(channels.memberCount))
+        .where(where)
+        .orderBy(asc(channels.displayOrder), desc(channels.memberCount))
         .limit(input.limit)
         .offset(input.offset);
       return { items, hasMore: items.length === input.limit };
@@ -236,14 +239,24 @@ export const channelsRouter = router({
           .max(100)
           .regex(/^[a-z0-9가-힣-]+$/, 'Slug must be letters, numbers, Korean characters, or hyphens'),
         description: z.string().max(1000).optional(),
+        type: z.enum(['board', 'space']).default('board'),
+        scope: z.enum(['company', 'subsidiary', 'department', 'project', 'interest']).default('company'),
+        postingMode: z.enum(['real_only', 'anonymous_allowed', 'anonymous_only']).default('anonymous_allowed'),
+        membershipType: z.enum(['open', 'request', 'invite']).default('open'),
+        isListed: z.boolean().default(true),
+        parentId: z.string().optional(),
+        defaultSort: z.enum(['latest', 'hot', 'pinned']).default('latest'),
+        purpose: z.enum(['discussion', 'knowledge', 'announcement', 'social']).default('discussion'),
+        displayOrder: z.number().int().default(0),
       })
     )
     .mutation(async ({ input, ctx }) => {
       await assertAdmin(ctx.userId, ctx.user?.email);
 
+      const { slug: rawSlug, ...rest } = input;
       const [created] = await db
         .insert(channels)
-        .values({ ...input, slug: normalizeSlug(input.slug), createdBy: ctx.userId, memberCount: 1 })
+        .values({ ...rest, slug: normalizeSlug(rawSlug), createdBy: ctx.userId, memberCount: 1 })
         .returning();
       await db
         .insert(channelMembers)

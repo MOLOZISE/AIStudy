@@ -12,7 +12,8 @@
     "type-check": "turbo run type-check",
     "db:push": "turbo run db:push --filter=@repo/db",
     "db:migrate": "turbo run db:migrate --filter=@repo/db",
-    "db:studio": "turbo run db:studio --filter=@repo/db"
+    "db:studio": "turbo run db:studio --filter=@repo/db",
+    "db:seed": "turbo run db:seed --filter=@repo/db"
   },
   "devDependencies": {
     "@types/node": "^20.11.5",

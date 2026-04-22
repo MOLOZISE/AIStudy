@@ -16,166 +16,142 @@ export function Sidebar({ onNavigate }: SidebarProps = {}) {
   const activeChannel = searchParams.get('channel');
   const [showRequestModal, setShowRequestModal] = useState(false);
 
-  const { data: channelsData } = trpc.channels.getList.useQuery({ limit: 50, offset: 0 });
-  const { data: myChannelIds, refetch: refetchMemberships } =
-    trpc.channels.getMyMemberships.useQuery();
+  const { data: boardsData } = trpc.channels.getList.useQuery({ limit: 50, offset: 0, type: 'board' });
+  const { data: spacesData } = trpc.channels.getList.useQuery({ limit: 50, offset: 0, type: 'space' });
+  const { data: myChannelIds, refetch: refetchMemberships } = trpc.channels.getMyMemberships.useQuery();
   const { data: isAdmin = false } = trpc.channels.isAdmin.useQuery();
 
-  const join = trpc.channels.join.useMutation({ onSuccess: () => refetchMemberships() });
   const leave = trpc.channels.leave.useMutation({ onSuccess: () => refetchMemberships() });
 
-  const channels = channelsData?.items ?? [];
-  const joined = channels.filter((channel) => myChannelIds?.includes(channel.id));
-  const discover = channels.filter((channel) => !myChannelIds?.includes(channel.id)).slice(0, 6);
-  const totalPosts = channels.reduce((sum, channel) => sum + (channel.postCount ?? 0), 0);
-  const totalMembers = channels.reduce((sum, channel) => sum + (channel.memberCount ?? 0), 0);
+  const boards = boardsData?.items ?? [];
+  const spaces = spacesData?.items ?? [];
+  const myBoards = boards.filter((b) => myChannelIds?.includes(b.id));
+  const mySpaces = spaces.filter((s) => myChannelIds?.includes(s.id));
+
+  function isActive(href: string) {
+    return pathname === href && !activeChannel;
+  }
 
   return (
     <aside className="w-56 shrink-0">
       {showRequestModal && <ChannelRequestModal onClose={() => setShowRequestModal(false)} />}
-      <div className="sticky top-20 space-y-4">
-        <section className="rounded-lg border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">커뮤니티</p>
-            <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-              <Stat label="글" value={totalPosts} />
-              <Stat label="멤버" value={totalMembers} />
-            </div>
-          </div>
+      <div className="sticky top-20 space-y-1">
 
-          <nav className="p-2">
-            <Link
-              href="/feed"
+        {/* 게시판 섹션 */}
+        <NavSection label="게시판">
+          <NavLink href="/boards" active={isActive('/boards')} onClick={onNavigate}>
+            커뮤니티 게시판
+          </NavLink>
+          {myBoards.map((board) => (
+            <NavLink
+              key={board.id}
+              href={`/feed?channel=${board.id}`}
+              active={activeChannel === board.id}
               onClick={onNavigate}
-              className={`flex items-center justify-between rounded-md px-3 py-2 text-sm hover:bg-slate-50 ${
-                pathname === '/feed' && !activeChannel
-                  ? 'bg-blue-50 font-semibold text-blue-700'
-                  : 'text-slate-700'
-              }`}
+              onLeave={() => leave.mutate({ channelId: board.id })}
             >
-              <span>전체 피드</span>
-              <span className="text-xs text-slate-400">{totalPosts}</span>
-            </Link>
-            {isAdmin && (
-              <Link
-                href="/admin/channels"
-                onClick={onNavigate}
-                className={`mt-1 flex items-center justify-between rounded-md px-3 py-2 text-sm hover:bg-slate-50 ${
-                  pathname === '/admin/channels'
-                    ? 'bg-blue-50 font-semibold text-blue-700'
-                    : 'text-slate-700'
-                }`}
-              >
-                <span>채널 신청 관리</span>
-              </Link>
-            )}
-          </nav>
-        </section>
+              # {board.name}
+            </NavLink>
+          ))}
+        </NavSection>
 
-        <ChannelSection
-          title="내 채널"
-          empty="아직 참여한 채널이 없습니다"
-          channels={joined}
-          activeChannel={activeChannel}
-          onNavigate={onNavigate}
-          onToggle={(channelId) => leave.mutate({ channelId })}
-          toggleLabel="나가기"
-        />
+        {/* 공간 섹션 */}
+        <NavSection label="내 공간">
+          <NavLink href="/spaces" active={isActive('/spaces')} onClick={onNavigate}>
+            공간 탐색
+          </NavLink>
+          {mySpaces.map((space) => (
+            <NavLink
+              key={space.id}
+              href={`/feed?channel=${space.id}`}
+              active={activeChannel === space.id}
+              onClick={onNavigate}
+              onLeave={() => leave.mutate({ channelId: space.id })}
+            >
+              · {space.name}
+            </NavLink>
+          ))}
+        </NavSection>
 
-        <ChannelSection
-          title="발견하기"
-          empty="새 채널이 생기면 여기에 표시됩니다"
-          channels={discover}
-          activeChannel={activeChannel}
-          onNavigate={onNavigate}
-          onToggle={(channelId) => join.mutate({ channelId })}
-          toggleLabel="참여"
-        />
+        {/* 관리자 링크 */}
+        {isAdmin && (
+          <NavSection label="관리">
+            <NavLink href="/admin/channels" active={pathname === '/admin/channels'} onClick={onNavigate}>
+              채널 신청 관리
+            </NavLink>
+            <NavLink href="/admin/reports" active={pathname === '/admin/reports'} onClick={onNavigate}>
+              신고 관리
+            </NavLink>
+          </NavSection>
+        )}
 
+        {/* 모아보기 (피드) — 하단 보조 */}
+        <div className="pt-1 border-t border-slate-200">
+          <NavLink href="/feed" active={isActive('/feed')} onClick={onNavigate} muted>
+            모아보기
+          </NavLink>
+        </div>
+
+        {/* 공간/채널 개설 신청 */}
         <button
           onClick={() => setShowRequestModal(true)}
-          className="w-full rounded-lg border border-dashed border-slate-300 bg-white px-4 py-3 text-left text-sm font-semibold text-slate-700 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+          className="w-full rounded-lg border border-dashed border-slate-300 bg-white px-4 py-3 text-left text-sm font-medium text-slate-500 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
         >
-          채널 개설 신청
-          <span className="mt-1 block text-xs font-normal leading-5 text-slate-400">
-            관리자가 승인하면 새 채널이 열립니다.
-          </span>
+          + 게시판 / 공간 개설 신청
         </button>
       </div>
     </aside>
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+function NavSection({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-md bg-slate-50 px-2 py-1.5">
-      <p className="font-semibold text-slate-900">{value.toLocaleString()}</p>
-      <p className="text-slate-400">{label}</p>
-    </div>
+    <section className="rounded-lg border border-slate-200 bg-white py-2">
+      <p className="px-3 pb-1 pt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p>
+      <nav className="px-1">{children}</nav>
+    </section>
   );
 }
 
-type Channel = {
-  id: string;
-  name: string;
-  description: string | null;
-  memberCount: number | null;
-  postCount: number | null;
-};
-
-function ChannelSection({
-  title,
-  empty,
-  channels,
-  activeChannel,
-  onNavigate,
-  onToggle,
-  toggleLabel,
+function NavLink({
+  href,
+  active,
+  onClick,
+  onLeave,
+  muted,
+  children,
 }: {
-  title: string;
-  empty: string;
-  channels: Channel[];
-  activeChannel: string | null;
-  onNavigate?: () => void;
-  onToggle: (channelId: string) => void;
-  toggleLabel: string;
+  href: string;
+  active: boolean;
+  onClick?: () => void;
+  onLeave?: () => void;
+  muted?: boolean;
+  children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-lg border border-slate-200 bg-white">
-      <div className="border-b border-slate-100 px-4 py-3">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">{title}</h2>
-      </div>
-      <div className="p-2">
-        {channels.length === 0 ? (
-          <p className="px-2 py-3 text-xs leading-5 text-slate-400">{empty}</p>
-        ) : (
-          channels.map((channel) => {
-            const isActive = activeChannel === channel.id;
-            return (
-              <div key={channel.id} className="group rounded-md hover:bg-slate-50">
-                <div className="flex items-start gap-1 px-2 py-2">
-                  <Link
-                    href={`/feed?channel=${channel.id}`}
-                    onClick={onNavigate}
-                    className={`min-w-0 flex-1 ${isActive ? 'text-blue-700' : 'text-slate-700'}`}
-                  >
-                    <p className="truncate text-sm font-medium"># {channel.name}</p>
-                    <p className="mt-0.5 truncate text-xs text-slate-400">
-                      {(channel.postCount ?? 0).toLocaleString()}개 글 · {(channel.memberCount ?? 0).toLocaleString()}명
-                    </p>
-                  </Link>
-                  <button
-                    onClick={() => onToggle(channel.id)}
-                    className="rounded px-2 py-1 text-xs font-medium text-slate-400 opacity-0 hover:bg-white hover:text-blue-600 group-hover:opacity-100"
-                  >
-                    {toggleLabel}
-                  </button>
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
-    </section>
+    <div className="group flex items-center rounded-md hover:bg-slate-50">
+      <Link
+        href={href}
+        onClick={onClick}
+        className={`flex-1 truncate px-3 py-2 text-sm ${
+          active
+            ? 'font-semibold text-blue-700'
+            : muted
+              ? 'text-slate-400 hover:text-slate-600'
+              : 'text-slate-700'
+        }`}
+      >
+        {children}
+      </Link>
+      {onLeave && (
+        <button
+          onClick={onLeave}
+          className="pr-2 text-xs text-slate-300 opacity-0 hover:text-red-400 group-hover:opacity-100"
+          title="나가기"
+        >
+          ✕
+        </button>
+      )}
+    </div>
   );
 }

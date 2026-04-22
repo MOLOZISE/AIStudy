@@ -58,11 +58,22 @@ export const channels = pgTable(
     postCount: integer('post_count').default(0),
     createdBy: uuid('created_by').references(() => profiles.id),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    // --- board/space pivot: additive metadata (all nullable/defaulted for backward compat) ---
+    type: varchar('type', { length: 50 }).default('board'),             // 'board' | 'space'
+    scope: varchar('scope', { length: 50 }).default('company'),         // 'company' | 'subsidiary' | 'department' | 'project' | 'interest'
+    postingMode: varchar('posting_mode', { length: 50 }).default('anonymous_allowed'), // 'real_only' | 'anonymous_allowed' | 'anonymous_only'
+    membershipType: varchar('membership_type', { length: 50 }).default('open'), // 'open' | 'request' | 'invite'
+    isListed: boolean('is_listed').default(true),
+    parentId: uuid('parent_id').references((): AnyPgColumn => channels.id),
+    defaultSort: varchar('default_sort', { length: 50 }).default('latest'), // 'latest' | 'hot' | 'pinned'
+    purpose: varchar('purpose', { length: 100 }).default('discussion'), // 'discussion' | 'knowledge' | 'announcement' | 'social'
+    displayOrder: integer('display_order').default(0),
   },
   (table) => {
     return {
       slugIdx: uniqueIndex('idx_channels_slug').on(table.slug),
       createdByIdx: index('idx_channels_created_by').on(table.createdBy),
+      typeIdx: index('idx_channels_type').on(table.type),
     };
   }
 );

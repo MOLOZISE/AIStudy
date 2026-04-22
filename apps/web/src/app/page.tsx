@@ -11,7 +11,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!isLoading && user) {
-      router.replace('/feed');
+      router.replace('/boards');
     }
   }, [user, isLoading, router]);
 

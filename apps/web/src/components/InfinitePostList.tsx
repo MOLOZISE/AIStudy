@@ -89,7 +89,7 @@ export function InfinitePostList({ channelId, flair, onStartPost }: InfinitePost
     <section className="space-y-4">
       <div className="flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">피드 정렬</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">글 목록</p>
           <p className="mt-1 text-sm text-slate-500">{SORT_LABELS[sort].hint}</p>
         </div>
         <div className="flex gap-2">

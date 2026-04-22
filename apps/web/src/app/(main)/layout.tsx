@@ -55,7 +55,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
-            <Link href="/feed" className="font-bold text-slate-950 hover:text-blue-600">
+            <Link href="/boards" className="font-bold text-slate-950 hover:text-blue-600">
               Company Community
             </Link>
           </div>
@@ -84,7 +84,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           <div className="fixed inset-0 z-20 bg-black/40 md:hidden" onClick={() => setDrawerOpen(false)} />
           <div className="fixed left-0 top-0 z-30 h-full w-72 overflow-y-auto bg-white shadow-xl md:hidden">
             <div className="flex items-center justify-between border-b border-slate-100 p-4">
-              <span className="font-semibold text-slate-800">채널</span>
+              <span className="font-semibold text-slate-800">게시판 / 공간</span>
               <button
                 onClick={() => setDrawerOpen(false)}
                 className="rounded p-1 text-slate-400 hover:text-slate-600"
