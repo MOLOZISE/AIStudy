@@ -45,6 +45,10 @@ BEGIN
   END IF;
 END $$;
 
+COMMIT;
+
+BEGIN;
+
 -- =========================================================
 -- Clear previous demo data so reruns stay idempotent.
 -- We collect target channel IDs by both fixed ID and slug so

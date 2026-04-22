@@ -11,6 +11,15 @@ const handler = (req: Request) =>
     req,
     router: appRouter,
     createContext,
+    onError({ error, path, req }) {
+      console.error('[tRPC]', {
+        path,
+        method: req.method,
+        message: error.message,
+        code: error.code,
+        cause: error.cause instanceof Error ? error.cause.message : error.cause,
+      });
+    },
     responseMeta({ errors }) {
       if (errors.some((error) => error.message === DATABASE_CONFIG_ERROR)) {
         return {
