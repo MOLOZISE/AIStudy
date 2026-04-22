@@ -52,61 +52,64 @@ END $$;
 -- =========================================================
 DELETE FROM reactions
 WHERE post_id IN (
-  SELECT id
-  FROM posts
-  WHERE channel_id IN (
-    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-    'cccccccc-cccc-cccc-cccc-cccccccccccc',
-    'dddddddd-dddd-dddd-dddd-dddddddddddd',
-    'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
-    'f1111111-1111-1111-1111-111111111111',
-    'f2222222-2222-2222-2222-222222222222',
-    'f3333333-3333-3333-3333-333333333333',
-    'f4444444-4444-4444-4444-444444444444',
-    'f5555555-5555-5555-5555-555555555555',
-    'f6666666-6666-6666-6666-666666666666',
-    'f7777777-7777-7777-7777-777777777777'
+  SELECT p.id
+  FROM posts p
+  JOIN channels ch ON ch.id = p.channel_id
+  WHERE ch.slug IN (
+    'notice',
+    'free',
+    'qna',
+    'knowledge',
+    'tech',
+    'culture',
+    'anon-suggest',
+    'anon-concern',
+    'space-projects',
+    'space-study',
+    'space-tf',
+    'space-hobby'
   )
 )
 OR comment_id IN (
   SELECT c.id
   FROM comments c
   JOIN posts p ON p.id = c.post_id
-  WHERE p.channel_id IN (
-    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-    'cccccccc-cccc-cccc-cccc-cccccccccccc',
-    'dddddddd-dddd-dddd-dddd-dddddddddddd',
-    'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
-    'f1111111-1111-1111-1111-111111111111',
-    'f2222222-2222-2222-2222-222222222222',
-    'f3333333-3333-3333-3333-333333333333',
-    'f4444444-4444-4444-4444-444444444444',
-    'f5555555-5555-5555-5555-555555555555',
-    'f6666666-6666-6666-6666-666666666666',
-    'f7777777-7777-7777-7777-777777777777'
+  JOIN channels ch ON ch.id = p.channel_id
+  WHERE ch.slug IN (
+    'notice',
+    'free',
+    'qna',
+    'knowledge',
+    'tech',
+    'culture',
+    'anon-suggest',
+    'anon-concern',
+    'space-projects',
+    'space-study',
+    'space-tf',
+    'space-hobby'
   )
 );
 
 DELETE FROM votes
 WHERE target_type = 'post'
   AND target_id IN (
-    SELECT id
-    FROM posts
-    WHERE channel_id IN (
-      'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-      'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-      'cccccccc-cccc-cccc-cccc-cccccccccccc',
-      'dddddddd-dddd-dddd-dddd-dddddddddddd',
-      'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
-      'f1111111-1111-1111-1111-111111111111',
-      'f2222222-2222-2222-2222-222222222222',
-      'f3333333-3333-3333-3333-333333333333',
-      'f4444444-4444-4444-4444-444444444444',
-      'f5555555-5555-5555-5555-555555555555',
-      'f6666666-6666-6666-6666-666666666666',
-      'f7777777-7777-7777-7777-777777777777'
+    SELECT p.id
+    FROM posts p
+    JOIN channels ch ON ch.id = p.channel_id
+    WHERE ch.slug IN (
+      'notice',
+      'free',
+      'qna',
+      'knowledge',
+      'tech',
+      'culture',
+      'anon-suggest',
+      'anon-concern',
+      'space-projects',
+      'space-study',
+      'space-tf',
+      'space-hobby'
     )
   )
 OR target_type = 'comment'
@@ -114,148 +117,161 @@ OR target_type = 'comment'
     SELECT c.id
     FROM comments c
     JOIN posts p ON p.id = c.post_id
-    WHERE p.channel_id IN (
-      'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-      'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-      'cccccccc-cccc-cccc-cccc-cccccccccccc',
-      'dddddddd-dddd-dddd-dddd-dddddddddddd',
-      'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
-      'f1111111-1111-1111-1111-111111111111',
-      'f2222222-2222-2222-2222-222222222222',
-      'f3333333-3333-3333-3333-333333333333',
-      'f4444444-4444-4444-4444-444444444444',
-      'f5555555-5555-5555-5555-555555555555',
-      'f6666666-6666-6666-6666-666666666666',
-      'f7777777-7777-7777-7777-777777777777'
+    JOIN channels ch ON ch.id = p.channel_id
+    WHERE ch.slug IN (
+      'notice',
+      'free',
+      'qna',
+      'knowledge',
+      'tech',
+      'culture',
+      'anon-suggest',
+      'anon-concern',
+      'space-projects',
+      'space-study',
+      'space-tf',
+      'space-hobby'
     )
   );
 
 DELETE FROM notifications
 WHERE post_id IN (
-  SELECT id
-  FROM posts
-  WHERE channel_id IN (
-    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-    'cccccccc-cccc-cccc-cccc-cccccccccccc',
-    'dddddddd-dddd-dddd-dddd-dddddddddddd',
-    'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
-    'f1111111-1111-1111-1111-111111111111',
-    'f2222222-2222-2222-2222-222222222222',
-    'f3333333-3333-3333-3333-333333333333',
-    'f4444444-4444-4444-4444-444444444444',
-    'f5555555-5555-5555-5555-555555555555',
-    'f6666666-6666-6666-6666-666666666666',
-    'f7777777-7777-7777-7777-777777777777'
+  SELECT p.id
+  FROM posts p
+  JOIN channels ch ON ch.id = p.channel_id
+  WHERE ch.slug IN (
+    'notice',
+    'free',
+    'qna',
+    'knowledge',
+    'tech',
+    'culture',
+    'anon-suggest',
+    'anon-concern',
+    'space-projects',
+    'space-study',
+    'space-tf',
+    'space-hobby'
   )
 )
 OR (target_type = 'post' AND target_id IN (
-  SELECT id
-  FROM posts
-  WHERE channel_id IN (
-    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-    'cccccccc-cccc-cccc-cccc-cccccccccccc',
-    'dddddddd-dddd-dddd-dddd-dddddddddddd',
-    'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
-    'f1111111-1111-1111-1111-111111111111',
-    'f2222222-2222-2222-2222-222222222222',
-    'f3333333-3333-3333-3333-333333333333',
-    'f4444444-4444-4444-4444-444444444444',
-    'f5555555-5555-5555-5555-555555555555',
-    'f6666666-6666-6666-6666-666666666666',
-    'f7777777-7777-7777-7777-777777777777'
+  SELECT p.id
+  FROM posts p
+  JOIN channels ch ON ch.id = p.channel_id
+  WHERE ch.slug IN (
+    'notice',
+    'free',
+    'qna',
+    'knowledge',
+    'tech',
+    'culture',
+    'anon-suggest',
+    'anon-concern',
+    'space-projects',
+    'space-study',
+    'space-tf',
+    'space-hobby'
   )
 ))
 OR (target_type = 'comment' AND target_id IN (
   SELECT c.id
   FROM comments c
   JOIN posts p ON p.id = c.post_id
-  WHERE p.channel_id IN (
-    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-    'cccccccc-cccc-cccc-cccc-cccccccccccc',
-    'dddddddd-dddd-dddd-dddd-dddddddddddd',
-    'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
-    'f1111111-1111-1111-1111-111111111111',
-    'f2222222-2222-2222-2222-222222222222',
-    'f3333333-3333-3333-3333-333333333333',
-    'f4444444-4444-4444-4444-444444444444',
-    'f5555555-5555-5555-5555-555555555555',
-    'f6666666-6666-6666-6666-666666666666',
-    'f7777777-7777-7777-7777-777777777777'
+  JOIN channels ch ON ch.id = p.channel_id
+  WHERE ch.slug IN (
+    'notice',
+    'free',
+    'qna',
+    'knowledge',
+    'tech',
+    'culture',
+    'anon-suggest',
+    'anon-concern',
+    'space-projects',
+    'space-study',
+    'space-tf',
+    'space-hobby'
   )
 ));
 
 DELETE FROM comments
 WHERE post_id IN (
-  SELECT id
-  FROM posts
-  WHERE channel_id IN (
-    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-    'cccccccc-cccc-cccc-cccc-cccccccccccc',
-    'dddddddd-dddd-dddd-dddd-dddddddddddd',
-    'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
-    'f1111111-1111-1111-1111-111111111111',
-    'f2222222-2222-2222-2222-222222222222',
-    'f3333333-3333-3333-3333-333333333333',
-    'f4444444-4444-4444-4444-444444444444',
-    'f5555555-5555-5555-5555-555555555555',
-    'f6666666-6666-6666-6666-666666666666',
-    'f7777777-7777-7777-7777-777777777777'
+  SELECT p.id
+  FROM posts p
+  JOIN channels ch ON ch.id = p.channel_id
+  WHERE ch.slug IN (
+    'notice',
+    'free',
+    'qna',
+    'knowledge',
+    'tech',
+    'culture',
+    'anon-suggest',
+    'anon-concern',
+    'space-projects',
+    'space-study',
+    'space-tf',
+    'space-hobby'
   )
 );
 
 DELETE FROM posts
 WHERE channel_id IN (
-  'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-  'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-  'cccccccc-cccc-cccc-cccc-cccccccccccc',
-  'dddddddd-dddd-dddd-dddd-dddddddddddd',
-  'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
-  'f1111111-1111-1111-1111-111111111111',
-  'f2222222-2222-2222-2222-222222222222',
-  'f3333333-3333-3333-3333-333333333333',
-  'f4444444-4444-4444-4444-444444444444',
-  'f5555555-5555-5555-5555-555555555555',
-  'f6666666-6666-6666-6666-666666666666',
-  'f7777777-7777-7777-7777-777777777777'
+  SELECT id
+  FROM channels
+  WHERE slug IN (
+    'notice',
+    'free',
+    'qna',
+    'knowledge',
+    'tech',
+    'culture',
+    'anon-suggest',
+    'anon-concern',
+    'space-projects',
+    'space-study',
+    'space-tf',
+    'space-hobby'
+  )
 );
 
 DELETE FROM channel_members
 WHERE channel_id IN (
-  'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-  'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-  'cccccccc-cccc-cccc-cccc-cccccccccccc',
-  'dddddddd-dddd-dddd-dddd-dddddddddddd',
-  'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
-  'f1111111-1111-1111-1111-111111111111',
-  'f2222222-2222-2222-2222-222222222222',
-  'f3333333-3333-3333-3333-333333333333',
-  'f4444444-4444-4444-4444-444444444444',
-  'f5555555-5555-5555-5555-555555555555',
-  'f6666666-6666-6666-6666-666666666666',
-  'f7777777-7777-7777-7777-777777777777'
+  SELECT id
+  FROM channels
+  WHERE slug IN (
+    'notice',
+    'free',
+    'qna',
+    'knowledge',
+    'tech',
+    'culture',
+    'anon-suggest',
+    'anon-concern',
+    'space-projects',
+    'space-study',
+    'space-tf',
+    'space-hobby'
+  )
 );
 
 DELETE FROM channel_requests
 WHERE slug IN ('data-team', 'running-club', 'private-lab');
 
 DELETE FROM channels
-WHERE id IN (
-  'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-  'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-  'cccccccc-cccc-cccc-cccc-cccccccccccc',
-  'dddddddd-dddd-dddd-dddd-dddddddddddd',
-  'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
-  'f1111111-1111-1111-1111-111111111111',
-  'f2222222-2222-2222-2222-222222222222',
-  'f3333333-3333-3333-3333-333333333333',
-  'f4444444-4444-4444-4444-444444444444',
-  'f5555555-5555-5555-5555-555555555555',
-  'f6666666-6666-6666-6666-666666666666',
-  'f7777777-7777-7777-7777-777777777777'
+WHERE slug IN (
+  'notice',
+  'free',
+  'qna',
+  'knowledge',
+  'tech',
+  'culture',
+  'anon-suggest',
+  'anon-concern',
+  'space-projects',
+  'space-study',
+  'space-tf',
+  'space-hobby'
 );
 
 -- =========================================================
