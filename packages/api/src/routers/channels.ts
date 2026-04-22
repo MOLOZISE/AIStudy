@@ -54,6 +54,21 @@ export const channelsRouter = router({
     }),
 
   /**
+   * Get single channel by slug
+   */
+  getBySlug: publicProcedure
+    .input(z.object({ slug: z.string() }))
+    .query(async ({ input }) => {
+      const [channel] = await db
+        .select()
+        .from(channels)
+        .where(eq(channels.slug, input.slug))
+        .limit(1);
+      if (!channel) throw new TRPCError({ code: 'NOT_FOUND', message: 'Channel not found' });
+      return channel;
+    }),
+
+  /**
    * Check whether the current user can review channel requests.
    */
   isAdmin: protectedProcedure.query(async ({ ctx }) => {
@@ -340,6 +355,7 @@ export const channelsRouter = router({
           name: channels.name,
           description: channels.description,
           memberCount: channels.memberCount,
+          type: channels.type,
         })
         .from(channels)
         .where(or(ilike(channels.name, term), ilike(channels.description, term)))

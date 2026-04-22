@@ -111,12 +111,17 @@ export default function SearchPage({
                 {channelsQuery.data?.map((channel) => (
                   <Link
                     key={channel.id}
-                    href={`/feed?channel=${channel.id}`}
+                    href={channel.type === 'space' ? `/spaces/${channel.slug}` : `/boards/${channel.slug}`}
                     className="block rounded-lg border border-slate-200 p-4 transition-colors hover:border-slate-300 hover:bg-slate-50"
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
-                        <h2 className="text-base font-semibold text-slate-950">#{channel.name}</h2>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-xs font-medium ${channel.type === 'space' ? 'text-indigo-500' : 'text-blue-500'}`}>
+                            {channel.type === 'space' ? '공간' : '게시판'}
+                          </span>
+                          <h2 className="text-base font-semibold text-slate-950">{channel.name}</h2>
+                        </div>
                         <p className="mt-1 text-sm leading-6 text-slate-600 line-clamp-2">
                           {channel.description ?? '설명 없음'}
                         </p>

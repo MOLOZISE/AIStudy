@@ -71,6 +71,7 @@ export default function BoardsPage() {
 
 type BoardItem = {
   id: string;
+  slug: string;
   name: string;
   description: string | null;
   memberCount: number | null;
@@ -88,7 +89,7 @@ function BoardGroup({ title, boards }: { title: string; boards: BoardItem[] }) {
         {boards.map((board) => (
           <Link
             key={board.id}
-            href={`/feed?channel=${board.id}`}
+            href={`/boards/${board.slug}`}
             className="flex items-center justify-between px-5 py-4 hover:bg-slate-50"
           >
             <div className="min-w-0">

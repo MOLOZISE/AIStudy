@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { trpc } from '@/lib/trpc';
 import { useState } from 'react';
 import { ChannelRequestModal } from './ChannelRequestModal';
@@ -12,8 +12,6 @@ interface SidebarProps {
 
 export function Sidebar({ onNavigate }: SidebarProps = {}) {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const activeChannel = searchParams.get('channel');
   const [showRequestModal, setShowRequestModal] = useState(false);
 
   const { data: boardsData } = trpc.channels.getList.useQuery({ limit: 50, offset: 0, type: 'board' });
@@ -29,7 +27,7 @@ export function Sidebar({ onNavigate }: SidebarProps = {}) {
   const mySpaces = spaces.filter((s) => myChannelIds?.includes(s.id));
 
   function isActive(href: string) {
-    return pathname === href && !activeChannel;
+    return pathname === href;
   }
 
   return (
@@ -45,8 +43,8 @@ export function Sidebar({ onNavigate }: SidebarProps = {}) {
           {myBoards.map((board) => (
             <NavLink
               key={board.id}
-              href={`/feed?channel=${board.id}`}
-              active={activeChannel === board.id}
+              href={`/boards/${board.slug}`}
+              active={pathname === `/boards/${board.slug}`}
               onClick={onNavigate}
               onLeave={() => leave.mutate({ channelId: board.id })}
             >
@@ -63,8 +61,8 @@ export function Sidebar({ onNavigate }: SidebarProps = {}) {
           {mySpaces.map((space) => (
             <NavLink
               key={space.id}
-              href={`/feed?channel=${space.id}`}
-              active={activeChannel === space.id}
+              href={`/spaces/${space.slug}`}
+              active={pathname === `/spaces/${space.slug}`}
               onClick={onNavigate}
               onLeave={() => leave.mutate({ channelId: space.id })}
             >
