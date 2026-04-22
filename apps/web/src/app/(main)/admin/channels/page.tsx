@@ -98,6 +98,15 @@ export default function AdminChannelsPage() {
                       <span className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${STATUS_COLORS[status]}`}>
                         {STATUS_LABELS[status]}
                       </span>
+                      {request.requestedType && (
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium ring-1 ${
+                          request.requestedType === 'space'
+                            ? 'bg-indigo-50 text-indigo-700 ring-indigo-100'
+                            : 'bg-blue-50 text-blue-700 ring-blue-100'
+                        }`}>
+                          {request.requestedType === 'space' ? '공간' : '게시판'}
+                        </span>
+                      )}
                       <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
                         /{request.slug}
                       </span>

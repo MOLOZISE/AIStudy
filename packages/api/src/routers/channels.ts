@@ -90,6 +90,10 @@ export const channelsRouter = router({
         slug: z.string().max(100).optional(),
         description: z.string().max(1000).optional(),
         reason: z.string().max(1000).optional(),
+        requestedType: z.enum(['board', 'space']).default('board'),
+        requestedScope: z.enum(['company', 'subsidiary', 'department', 'project', 'interest']).default('company'),
+        requestedPostingMode: z.enum(['real_only', 'anonymous_allowed', 'anonymous_only']).default('anonymous_allowed'),
+        requestedMembershipType: z.enum(['open', 'request', 'invite']).default('open'),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -124,6 +128,10 @@ export const channelsRouter = router({
           description: input.description?.trim() || null,
           reason: input.reason?.trim() || null,
           requestedBy: ctx.userId,
+          requestedType: input.requestedType,
+          requestedScope: input.requestedScope,
+          requestedPostingMode: input.requestedPostingMode,
+          requestedMembershipType: input.requestedMembershipType,
         })
         .returning();
 
@@ -158,6 +166,10 @@ export const channelsRouter = router({
           reviewedAt: channelRequests.reviewedAt,
           createdChannelId: channelRequests.createdChannelId,
           createdAt: channelRequests.createdAt,
+          requestedType: channelRequests.requestedType,
+          requestedScope: channelRequests.requestedScope,
+          requestedPostingMode: channelRequests.requestedPostingMode,
+          requestedMembershipType: channelRequests.requestedMembershipType,
         })
         .from(channelRequests)
         .leftJoin(profiles, eq(channelRequests.requestedBy, profiles.id))
@@ -204,6 +216,10 @@ export const channelsRouter = router({
           description: request.description,
           createdBy: request.requestedBy,
           memberCount: 1,
+          type: request.requestedType ?? 'board',
+          scope: request.requestedScope ?? 'company',
+          postingMode: request.requestedPostingMode ?? 'anonymous_allowed',
+          membershipType: request.requestedMembershipType ?? 'open',
         })
         .returning();
 

@@ -97,6 +97,11 @@ export const channelRequests = pgTable(
     reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
     createdChannelId: uuid('created_channel_id').references(() => channels.id),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    // requested channel metadata
+    requestedType: varchar('requested_type', { length: 50 }).default('board'),
+    requestedScope: varchar('requested_scope', { length: 50 }).default('company'),
+    requestedPostingMode: varchar('requested_posting_mode', { length: 50 }).default('anonymous_allowed'),
+    requestedMembershipType: varchar('requested_membership_type', { length: 50 }).default('open'),
   },
   (table) => {
     return {
