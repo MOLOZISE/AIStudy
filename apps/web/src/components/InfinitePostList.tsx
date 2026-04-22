@@ -18,6 +18,7 @@ interface InfinitePostListProps {
 }
 
 const LIMIT = 20;
+const MAX_OFFSET = 1000;
 
 const SORT_LABELS: Record<SortOption, { label: string; hint: string }> = {
   hot: { label: '인기', hint: '반응이 빠르게 모이는 글' },
@@ -38,20 +39,24 @@ export function InfinitePostList({ channelId, flair, onStartPost }: InfinitePost
   const [hasMore, setHasMore] = useState(true);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  const { data, isFetching, refetch } = trpc.posts.getFeed.useQuery(
+  const { data, isFetching, isError, refetch } = trpc.posts.getFeed.useQuery(
     { channelId, flair, sort, limit: LIMIT, offset },
-    { keepPreviousData: true }
+    { keepPreviousData: true, retry: false }
   );
 
   useEffect(() => {
+    if (isError) {
+      setHasMore(false);
+      return;
+    }
     if (!data) return;
     if (offset === 0) {
       setAllPosts(data.items);
     } else {
       setAllPosts((prev) => [...prev, ...data.items]);
     }
-    setHasMore(data.hasMore);
-  }, [data, offset]);
+    setHasMore(data.hasMore && offset + LIMIT < MAX_OFFSET);
+  }, [data, offset, isError]);
 
   useEffect(() => {
     setOffset(0);
@@ -60,10 +65,10 @@ export function InfinitePostList({ channelId, flair, onStartPost }: InfinitePost
   }, [sort, channelId, flair]);
 
   const loadMore = useCallback(() => {
-    if (!isFetching && hasMore) {
+    if (!isFetching && !isError && hasMore && offset + LIMIT < MAX_OFFSET) {
       setOffset((prev) => prev + LIMIT);
     }
-  }, [isFetching, hasMore]);
+  }, [isFetching, isError, hasMore, offset]);
 
   useEffect(() => {
     const el = bottomRef.current;
@@ -152,7 +157,19 @@ export function InfinitePostList({ channelId, flair, onStartPost }: InfinitePost
           </div>
         )}
 
-        {!hasMore && allPosts.length > 0 && (
+        {isError && (
+          <div className="rounded-lg border border-red-100 bg-red-50 px-5 py-4 text-center">
+            <p className="text-sm text-red-600">글을 불러오는 중 오류가 발생했습니다.</p>
+            <button
+              onClick={() => { setOffset(0); setAllPosts([]); setHasMore(true); refetch(); }}
+              className="mt-2 text-xs font-medium text-red-500 underline hover:text-red-700"
+            >
+              다시 시도
+            </button>
+          </div>
+        )}
+
+        {!isError && !hasMore && allPosts.length > 0 && (
           <div className="py-4 text-center text-xs text-slate-400">모든 글을 확인했습니다</div>
         )}
       </div>
