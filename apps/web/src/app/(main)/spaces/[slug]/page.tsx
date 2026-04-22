@@ -7,6 +7,7 @@ import { InfinitePostList } from '@/components/InfinitePostList';
 import { PostCreateModal } from '@/components/PostCreateModal';
 import { FlairChips } from '@/components/FlairChips';
 import { trpc } from '@/lib/trpc';
+import { useAuthStore } from '@/store/auth';
 
 const MEMBERSHIP_LABELS: Record<string, string> = {
   open: '자유 참여',
@@ -26,9 +27,12 @@ export default function SpaceDetailPage({
   const router = useRouter();
   const [showModal, setShowModal] = useState(false);
   const [feedKey, setFeedKey] = useState(0);
+  const { user } = useAuthStore();
 
   const { data: channel, isLoading, error } = trpc.channels.getBySlug.useQuery({ slug });
-  const { data: myChannelIds, refetch: refetchMemberships } = trpc.channels.getMyMemberships.useQuery();
+  const { data: myChannelIds, refetch: refetchMemberships } = trpc.channels.getMyMemberships.useQuery(undefined, {
+    enabled: !!user,
+  });
   const join = trpc.channels.join.useMutation({ onSuccess: () => refetchMemberships() });
   const leave = trpc.channels.leave.useMutation({ onSuccess: () => refetchMemberships() });
 

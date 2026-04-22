@@ -6,6 +6,7 @@ import { InfinitePostList } from '@/components/InfinitePostList';
 import { PostCreateModal } from '@/components/PostCreateModal';
 import { FlairChips } from '@/components/FlairChips';
 import { trpc } from '@/lib/trpc';
+import { useAuthStore } from '@/store/auth';
 
 export default function FeedPage() {
   const router = useRouter();
@@ -14,9 +15,12 @@ export default function FeedPage() {
   const activeFlair = searchParams.get('flair') ?? undefined;
   const [showModal, setShowModal] = useState(false);
   const [feedKey, setFeedKey] = useState(0);
+  const { user } = useAuthStore();
 
   const { data: channelsData } = trpc.channels.getList.useQuery({ limit: 50, offset: 0 });
-  const { data: myChannelIds, refetch: refetchMemberships } = trpc.channels.getMyMemberships.useQuery();
+  const { data: myChannelIds, refetch: refetchMemberships } = trpc.channels.getMyMemberships.useQuery(undefined, {
+    enabled: !!user,
+  });
   const join = trpc.channels.join.useMutation({ onSuccess: () => refetchMemberships() });
   const leave = trpc.channels.leave.useMutation({ onSuccess: () => refetchMemberships() });
 

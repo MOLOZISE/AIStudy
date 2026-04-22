@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { trpc } from '@/lib/trpc';
 import { useState } from 'react';
 import { ChannelRequestModal } from './ChannelRequestModal';
+import { useAuthStore } from '@/store/auth';
 
 interface SidebarProps {
   onNavigate?: () => void;
@@ -24,11 +25,16 @@ type ChannelItem = {
 export function Sidebar({ onNavigate }: SidebarProps = {}) {
   const pathname = usePathname();
   const [showRequestModal, setShowRequestModal] = useState(false);
+  const { user } = useAuthStore();
 
   const { data: boardsData } = trpc.channels.getList.useQuery({ limit: 50, offset: 0, type: 'board' });
   const { data: spacesData } = trpc.channels.getList.useQuery({ limit: 50, offset: 0, type: 'space' });
-  const { data: myChannelIds, refetch: refetchMemberships } = trpc.channels.getMyMemberships.useQuery();
-  const { data: isAdmin = false } = trpc.channels.isAdmin.useQuery();
+  const { data: myChannelIds, refetch: refetchMemberships } = trpc.channels.getMyMemberships.useQuery(undefined, {
+    enabled: !!user,
+  });
+  const { data: isAdmin = false } = trpc.channels.isAdmin.useQuery(undefined, {
+    enabled: !!user,
+  });
 
   const leave = trpc.channels.leave.useMutation({ onSuccess: () => refetchMemberships() });
   const join = trpc.channels.join.useMutation({ onSuccess: () => refetchMemberships() });

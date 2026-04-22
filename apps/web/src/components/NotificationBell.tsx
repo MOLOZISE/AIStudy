@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { trpc } from '@/lib/trpc';
 import { relativeTime } from '@/lib/time';
+import { useAuthStore } from '@/store/auth';
 
 const TYPE_LABEL: Record<string, string> = {
   comment: '댓글',
@@ -29,14 +30,16 @@ export function NotificationBell() {
   const ref = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const utils = trpc.useContext();
+  const { user } = useAuthStore();
 
   const { data: unreadCount = 0 } = trpc.notifications.getUnreadCount.useQuery(undefined, {
+    enabled: !!user,
     refetchInterval: 30_000,
   });
 
   const { data: items = [] } = trpc.notifications.getList.useQuery(
     { limit: 20 },
-    { enabled: open }
+    { enabled: open && !!user }
   );
 
   const markRead = trpc.notifications.markRead.useMutation({

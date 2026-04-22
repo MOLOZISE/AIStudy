@@ -4,16 +4,20 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { trpc } from '@/lib/trpc';
 import { PostCreateModal } from '@/components/PostCreateModal';
+import { useAuthStore } from '@/store/auth';
 
 export default function SpacesPage() {
   const [showModal, setShowModal] = useState(false);
+  const { user } = useAuthStore();
 
   const { data: spacesData, isLoading } = trpc.channels.getList.useQuery({
     limit: 50,
     offset: 0,
     type: 'space',
   });
-  const { data: myChannelIds } = trpc.channels.getMyMemberships.useQuery();
+  const { data: myChannelIds } = trpc.channels.getMyMemberships.useQuery(undefined, {
+    enabled: !!user,
+  });
   const join = trpc.channels.join.useMutation();
 
   const spaces = spacesData?.items ?? [];
