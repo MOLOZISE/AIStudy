@@ -22,7 +22,8 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
             (opts.direction === 'down' && opts.result instanceof Error),
         }),
         httpBatchLink({
-          url: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/trpc`,
+          // Same-origin by default so production never falls back to localhost.
+          url: '/api/trpc',
           async headers() {
             const token =
               typeof window !== 'undefined'

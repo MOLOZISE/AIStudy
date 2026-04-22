@@ -3,13 +3,30 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- =========================================================
--- Backfill schema differences for older databases
+-- Backfill older databases so the seed can be re-run safely.
 -- =========================================================
 ALTER TABLE profiles
   ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'member';
 
 ALTER TABLE notifications
   ADD COLUMN IF NOT EXISTS post_id UUID REFERENCES posts(id);
+
+ALTER TABLE channels
+  ADD COLUMN IF NOT EXISTS type VARCHAR(50) DEFAULT 'board',
+  ADD COLUMN IF NOT EXISTS scope VARCHAR(50) DEFAULT 'company',
+  ADD COLUMN IF NOT EXISTS posting_mode VARCHAR(50) DEFAULT 'anonymous_allowed',
+  ADD COLUMN IF NOT EXISTS membership_type VARCHAR(50) DEFAULT 'open',
+  ADD COLUMN IF NOT EXISTS is_listed BOOLEAN DEFAULT true,
+  ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES channels(id),
+  ADD COLUMN IF NOT EXISTS default_sort VARCHAR(50) DEFAULT 'latest',
+  ADD COLUMN IF NOT EXISTS purpose VARCHAR(100) DEFAULT 'discussion',
+  ADD COLUMN IF NOT EXISTS display_order INTEGER DEFAULT 0;
+
+ALTER TABLE channel_requests
+  ADD COLUMN IF NOT EXISTS requested_type VARCHAR(50) DEFAULT 'board',
+  ADD COLUMN IF NOT EXISTS requested_scope VARCHAR(50) DEFAULT 'company',
+  ADD COLUMN IF NOT EXISTS requested_posting_mode VARCHAR(50) DEFAULT 'anonymous_allowed',
+  ADD COLUMN IF NOT EXISTS requested_membership_type VARCHAR(50) DEFAULT 'open';
 
 DO $$
 BEGIN
@@ -30,9 +47,6 @@ END $$;
 
 -- =========================================================
 -- Auth users
--- Note: these rows satisfy the FK from public.profiles -> auth.users.
--- If you also want to sign in with them, you may need to create matching
--- auth identities in Supabase Auth as well.
 -- =========================================================
 INSERT INTO auth.users (
   instance_id,
@@ -153,7 +167,7 @@ INSERT INTO profiles (
   (
     '11111111-1111-1111-1111-111111111111',
     'mina.admin@company.demo',
-    '???遺븍き??????',
+    'Mina Admin',
     'admin',
     'Platform',
     'Engineering Manager',
@@ -167,7 +181,7 @@ INSERT INTO profiles (
   (
     '22222222-2222-2222-2222-222222222222',
     'seo.yun@company.demo',
-    '??癲ル슢???썬럸?',
+    'Seo Yun',
     'moderator',
     'People Ops',
     'Community Manager',
@@ -181,7 +195,7 @@ INSERT INTO profiles (
   (
     '33333333-3333-3333-3333-333333333333',
     'junho.kim@company.demo',
-    '?μ떝?띄몭?吏녶젆?빧??',
+    'Junho Kim',
     'member',
     'Backend',
     'Software Engineer',
@@ -195,7 +209,7 @@ INSERT INTO profiles (
   (
     '44444444-4444-4444-4444-444444444444',
     'hayeon.lee@company.demo',
-    '??癲ル슢???援?',
+    'Hayeon Lee',
     'member',
     'Design',
     'Product Designer',
@@ -209,7 +223,7 @@ INSERT INTO profiles (
   (
     '55555555-5555-5555-5555-555555555555',
     'taeho.park@company.demo',
-    '??????',
+    'Taeho Park',
     'member',
     'Sales',
     'Account Executive',
@@ -223,7 +237,7 @@ INSERT INTO profiles (
   (
     '66666666-6666-6666-6666-666666666666',
     'sujin.choi@company.demo',
-    '????蹂κ텥??',
+    'Sujin Choi',
     'member',
     'Product',
     'Product Manager',
@@ -258,72 +272,289 @@ INSERT INTO channels (
   member_count,
   post_count,
   created_by,
-  created_at
+  created_at,
+  type,
+  scope,
+  posting_mode,
+  membership_type,
+  is_listed,
+  parent_id,
+  default_sort,
+  purpose,
+  display_order
 ) VALUES
   (
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-    'general',
-    '?????밸븶???????곷쿀?',
-    '??????????밸븶???????곷쿀??? ?????곷뉴???????욱룏????轅붽틓??熬곥끇釉??ㅒ???????????????嶺??????뽯쨦??',
+    'notice',
+    '공지사항',
+    '회사 공지와 운영 안내를 모아두는 공식 게시판',
     NULL,
     FALSE,
     0,
     0,
     '11111111-1111-1111-1111-111111111111',
-    NOW() - INTERVAL '30 days'
+    NOW() - INTERVAL '30 days',
+    'board',
+    'company',
+    'real_only',
+    'open',
+    TRUE,
+    NULL,
+    'pinned',
+    'announcement',
+    1
   ),
   (
     'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
-    'engineering',
-    '???ル봿??誘⑸쿋???',
-    '???ル봿??誘⑸쿋???????댁삩????轅붽틓????ш내??쭩? ?????????????곷쿀??, ???沃섃뫖???????癲??????????嶺??????뽯쨦??',
+    'free',
+    '자유게시판',
+    '가볍게 이야기하고 소식을 나누는 공간',
+    NULL,
+    FALSE,
+    0,
+    0,
+    '22222222-2222-2222-2222-222222222222',
+    NOW() - INTERVAL '29 days',
+    'board',
+    'company',
+    'anonymous_allowed',
+    'open',
+    TRUE,
+    NULL,
+    'hot',
+    'social',
+    2
+  ),
+  (
+    'cccccccc-cccc-cccc-cccc-cccccccccccc',
+    'qna',
+    'Q&A / 질문답변',
+    '업무, 제도, 복지 관련 궁금한 점을 묻고 답하는 게시판',
+    NULL,
+    FALSE,
+    0,
+    0,
+    '22222222-2222-2222-2222-222222222222',
+    NOW() - INTERVAL '28 days',
+    'board',
+    'company',
+    'anonymous_allowed',
+    'open',
+    TRUE,
+    NULL,
+    'latest',
+    'discussion',
+    3
+  ),
+  (
+    'dddddddd-dddd-dddd-dddd-dddddddddddd',
+    'knowledge',
+    '지식공유',
+    '문서, 팁, 노하우를 모아두는 지식형 게시판',
     NULL,
     FALSE,
     0,
     0,
     '11111111-1111-1111-1111-111111111111',
-    NOW() - INTERVAL '29 days'
+    NOW() - INTERVAL '27 days',
+    'board',
+    'company',
+    'real_only',
+    'open',
+    TRUE,
+    NULL,
+    'hot',
+    'knowledge',
+    4
   ),
   (
-    'cccccccc-cccc-cccc-cccc-cccccccccccc',
-    'people',
-    '?????',
-    '???곗뒭??壤굿??뽧렑???ㅿ폍??됤뵾?????? ???ㅼ뒧?戮ル탶?, ?????? ??꿔꺂?????????댁삩???????????????紐꾩죩??????嶺??????뽯쨦??',
+    'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee',
+    'tech',
+    '기술토론',
+    '개발, 인프라, 데이터, 기술 전반을 다루는 게시판',
+    NULL,
+    FALSE,
+    0,
+    0,
+    '11111111-1111-1111-1111-111111111111',
+    NOW() - INTERVAL '26 days',
+    'board',
+    'company',
+    'real_only',
+    'open',
+    TRUE,
+    NULL,
+    'hot',
+    'discussion',
+    5
+  ),
+  (
+    'f1111111-1111-1111-1111-111111111111',
+    'culture',
+    '복지 / 문화',
+    '사내 복지, 행사, 취미 이야기를 나누는 게시판',
     NULL,
     FALSE,
     0,
     0,
     '22222222-2222-2222-2222-222222222222',
-    NOW() - INTERVAL '28 days'
+    NOW() - INTERVAL '25 days',
+    'board',
+    'company',
+    'anonymous_allowed',
+    'open',
+    TRUE,
+    NULL,
+    'latest',
+    'social',
+    6
   ),
   (
-    'dddddddd-dddd-dddd-dddd-dddddddddddd',
-    'random',
-    '????',
-    '???ル봿?????ㅼ뒧?????됀????怨뚮뼺??ъ┿????롪퍓肉????嚥싲갭횧?蹂잜맪??????욱룕???????? ???棺堉?댆洹잆궘??????嶺??????뽯쨦??',
+    'f2222222-2222-2222-2222-222222222222',
+    'anon-suggest',
+    '익명 제안',
+    '익명으로 제안과 건의사항을 남기는 게시판',
+    NULL,
+    FALSE,
+    0,
+    0,
+    '11111111-1111-1111-1111-111111111111',
+    NOW() - INTERVAL '24 days',
+    'board',
+    'company',
+    'anonymous_only',
+    'open',
+    TRUE,
+    NULL,
+    'latest',
+    'discussion',
+    7
+  ),
+  (
+    'f3333333-3333-3333-3333-333333333333',
+    'anon-concern',
+    '익명 고민',
+    '익명으로 고민과 제안을 나누는 게시판',
     NULL,
     FALSE,
     0,
     0,
     '22222222-2222-2222-2222-222222222222',
-    NOW() - INTERVAL '27 days'
+    NOW() - INTERVAL '23 days',
+    'board',
+    'company',
+    'anonymous_only',
+    'open',
+    TRUE,
+    NULL,
+    'latest',
+    'social',
+    8
+  ),
+  (
+    'f4444444-4444-4444-4444-444444444444',
+    'space-projects',
+    '프로젝트 공간',
+    '프로젝트별 이슈, 공유, 공지를 위한 공간',
+    NULL,
+    FALSE,
+    0,
+    0,
+    '11111111-1111-1111-1111-111111111111',
+    NOW() - INTERVAL '21 days',
+    'space',
+    'project',
+    'real_only',
+    'invite',
+    TRUE,
+    NULL,
+    'latest',
+    'discussion',
+    20
+  ),
+  (
+    'f5555555-5555-5555-5555-555555555555',
+    'space-study',
+    '스터디 공간',
+    '사내 스터디 그룹을 위한 공간',
+    NULL,
+    FALSE,
+    0,
+    0,
+    '11111111-1111-1111-1111-111111111111',
+    NOW() - INTERVAL '20 days',
+    'space',
+    'interest',
+    'real_only',
+    'open',
+    TRUE,
+    NULL,
+    'latest',
+    'knowledge',
+    21
+  ),
+  (
+    'f6666666-6666-6666-6666-666666666666',
+    'space-tf',
+    'TF 공간',
+    '단기 태스크포스 전용 비공개 공간',
+    NULL,
+    FALSE,
+    0,
+    0,
+    '11111111-1111-1111-1111-111111111111',
+    NOW() - INTERVAL '19 days',
+    'space',
+    'project',
+    'real_only',
+    'invite',
+    FALSE,
+    NULL,
+    'latest',
+    'discussion',
+    22
+  ),
+  (
+    'f7777777-7777-7777-7777-777777777777',
+    'space-hobby',
+    '취미 모임',
+    '운동, 여행, 독서 같은 사내 취미 모임 공간',
+    NULL,
+    FALSE,
+    0,
+    0,
+    '22222222-2222-2222-2222-222222222222',
+    NOW() - INTERVAL '18 days',
+    'space',
+    'interest',
+    'anonymous_allowed',
+    'open',
+    TRUE,
+    NULL,
+    'latest',
+    'social',
+    23
   )
 ON CONFLICT (slug) DO UPDATE SET
   name = EXCLUDED.name,
   description = EXCLUDED.description,
   icon_url = EXCLUDED.icon_url,
   is_private = EXCLUDED.is_private,
-  created_by = EXCLUDED.created_by;
+  created_by = EXCLUDED.created_by,
+  type = EXCLUDED.type,
+  scope = EXCLUDED.scope,
+  posting_mode = EXCLUDED.posting_mode,
+  membership_type = EXCLUDED.membership_type,
+  is_listed = EXCLUDED.is_listed,
+  parent_id = EXCLUDED.parent_id,
+  default_sort = EXCLUDED.default_sort,
+  purpose = EXCLUDED.purpose,
+  display_order = EXCLUDED.display_order;
 
 -- =========================================================
 -- Channel members
 -- =========================================================
-INSERT INTO channel_members (
-  channel_id,
-  user_id,
-  role,
-  joined_at
-) VALUES
+INSERT INTO channel_members (channel_id, user_id, role, joined_at) VALUES
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111', 'admin', NOW() - INTERVAL '30 days'),
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '22222222-2222-2222-2222-222222222222', 'moderator', NOW() - INTERVAL '29 days'),
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '33333333-3333-3333-3333-333333333333', 'member', NOW() - INTERVAL '28 days'),
@@ -346,7 +577,46 @@ INSERT INTO channel_members (
   ('dddddddd-dddd-dddd-dddd-dddddddddddd', '33333333-3333-3333-3333-333333333333', 'member', NOW() - INTERVAL '26 days'),
   ('dddddddd-dddd-dddd-dddd-dddddddddddd', '44444444-4444-4444-4444-444444444444', 'member', NOW() - INTERVAL '26 days'),
   ('dddddddd-dddd-dddd-dddd-dddddddddddd', '55555555-5555-5555-5555-555555555555', 'member', NOW() - INTERVAL '26 days'),
-  ('dddddddd-dddd-dddd-dddd-dddddddddddd', '66666666-6666-6666-6666-666666666666', 'member', NOW() - INTERVAL '26 days')
+  ('dddddddd-dddd-dddd-dddd-dddddddddddd', '66666666-6666-6666-6666-666666666666', 'member', NOW() - INTERVAL '26 days'),
+
+  ('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', '11111111-1111-1111-1111-111111111111', 'admin', NOW() - INTERVAL '26 days'),
+  ('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', '33333333-3333-3333-3333-333333333333', 'member', NOW() - INTERVAL '25 days'),
+  ('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', '55555555-5555-5555-5555-555555555555', 'member', NOW() - INTERVAL '25 days'),
+  ('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', '66666666-6666-6666-6666-666666666666', 'member', NOW() - INTERVAL '25 days'),
+
+  ('f1111111-1111-1111-1111-111111111111', '11111111-1111-1111-1111-111111111111', 'admin', NOW() - INTERVAL '25 days'),
+  ('f1111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', 'member', NOW() - INTERVAL '24 days'),
+  ('f1111111-1111-1111-1111-111111111111', '44444444-4444-4444-4444-444444444444', 'member', NOW() - INTERVAL '24 days'),
+  ('f1111111-1111-1111-1111-111111111111', '55555555-5555-5555-5555-555555555555', 'member', NOW() - INTERVAL '24 days'),
+  ('f1111111-1111-1111-1111-111111111111', '66666666-6666-6666-6666-666666666666', 'member', NOW() - INTERVAL '24 days'),
+
+  ('f2222222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111', 'admin', NOW() - INTERVAL '24 days'),
+  ('f2222222-2222-2222-2222-222222222222', '22222222-2222-2222-2222-222222222222', 'member', NOW() - INTERVAL '23 days'),
+  ('f2222222-2222-2222-2222-222222222222', '33333333-3333-3333-3333-333333333333', 'member', NOW() - INTERVAL '23 days'),
+
+  ('f3333333-3333-3333-3333-333333333333', '11111111-1111-1111-1111-111111111111', 'admin', NOW() - INTERVAL '23 days'),
+  ('f3333333-3333-3333-3333-333333333333', '22222222-2222-2222-2222-222222222222', 'member', NOW() - INTERVAL '23 days'),
+  ('f3333333-3333-3333-3333-333333333333', '44444444-4444-4444-4444-444444444444', 'member', NOW() - INTERVAL '22 days'),
+  ('f3333333-3333-3333-3333-333333333333', '55555555-5555-5555-5555-555555555555', 'member', NOW() - INTERVAL '22 days'),
+
+  ('f4444444-4444-4444-4444-444444444444', '11111111-1111-1111-1111-111111111111', 'admin', NOW() - INTERVAL '21 days'),
+  ('f4444444-4444-4444-4444-444444444444', '33333333-3333-3333-3333-333333333333', 'member', NOW() - INTERVAL '20 days'),
+  ('f4444444-4444-4444-4444-444444444444', '55555555-5555-5555-5555-555555555555', 'member', NOW() - INTERVAL '20 days'),
+
+  ('f5555555-5555-5555-5555-555555555555', '11111111-1111-1111-1111-111111111111', 'admin', NOW() - INTERVAL '20 days'),
+  ('f5555555-5555-5555-5555-555555555555', '22222222-2222-2222-2222-222222222222', 'member', NOW() - INTERVAL '19 days'),
+  ('f5555555-5555-5555-5555-555555555555', '33333333-3333-3333-3333-333333333333', 'member', NOW() - INTERVAL '19 days'),
+  ('f5555555-5555-5555-5555-555555555555', '44444444-4444-4444-4444-444444444444', 'member', NOW() - INTERVAL '19 days'),
+  ('f5555555-5555-5555-5555-555555555555', '66666666-6666-6666-6666-666666666666', 'member', NOW() - INTERVAL '19 days'),
+
+  ('f6666666-6666-6666-6666-666666666666', '11111111-1111-1111-1111-111111111111', 'admin', NOW() - INTERVAL '19 days'),
+  ('f6666666-6666-6666-6666-666666666666', '33333333-3333-3333-3333-333333333333', 'member', NOW() - INTERVAL '18 days'),
+  ('f6666666-6666-6666-6666-666666666666', '66666666-6666-6666-6666-666666666666', 'member', NOW() - INTERVAL '18 days'),
+
+  ('f7777777-7777-7777-7777-777777777777', '22222222-2222-2222-2222-222222222222', 'admin', NOW() - INTERVAL '18 days'),
+  ('f7777777-7777-7777-7777-777777777777', '44444444-4444-4444-4444-444444444444', 'member', NOW() - INTERVAL '17 days'),
+  ('f7777777-7777-7777-7777-777777777777', '55555555-5555-5555-5555-555555555555', 'member', NOW() - INTERVAL '17 days'),
+  ('f7777777-7777-7777-7777-777777777777', '66666666-6666-6666-6666-666666666666', 'member', NOW() - INTERVAL '17 days')
 ON CONFLICT (channel_id, user_id) DO UPDATE SET
   role = EXCLUDED.role,
   joined_at = EXCLUDED.joined_at;
@@ -383,8 +653,8 @@ INSERT INTO posts (
     '11111111-1111-1111-1111-111111111111',
     FALSE,
     NULL,
-    '?????????ш끽維뽳쭩??????? ?????',
-    '???沅걔?????18:00~19:00????ш끽維뽳쭩????????????????????낆젵. ???沅걔?????????욱룏???#???ル봿??誘⑸쿋???????嶺????鶯ㅺ동????껊븕????용츧????ロ뒌??',
+    '이번 주 점검 안내',
+    '이번 주 금요일 18:00~19:00에 서비스 점검이 예정되어 있습니다. 점검 시간에는 일부 기능이 잠시 제한될 수 있어요.',
     'text',
     ARRAY[]::text[],
     NULL,
@@ -406,8 +676,8 @@ INSERT INTO posts (
     '33333333-3333-3333-3333-333333333333',
     FALSE,
     NULL,
-    '??ш끽維뽳쭩???????????2??鶯ㅺ동????????????棺堉?댆洹잆궘??⑸돗????????逾?????',
-    '?????癒꺜?????쇨덫????????밸븶?ⓥ뮧???꿔꺂??틝?????ш끽維뽳쭩????諛몄????좉눼????怨쀫뮝力??????????沃섃뫖??????????????????????ル봿?????????낆젵.',
+    '오늘 점심 메뉴 추천해요',
+    '다들 점심 메뉴 뭐 드실 예정인가요? 근처 새로 생긴 식당도 궁금합니다.',
     'text',
     ARRAY[]::text[],
     NULL,
@@ -429,8 +699,8 @@ INSERT INTO posts (
     '66666666-6666-6666-6666-666666666666',
     FALSE,
     NULL,
-    '????VPN ??????猷⑤뇲??????욱룏?',
-    '?????밸븶筌믩뀈瑗?????????????VPN????????????썼キ?Β????거??????ル봿??? ?轅붽틓?節됰쑏???몡??寃????濚밸Ŧ寃㎩쳞?????',
+    'VPN 접속이 느릴 때 확인할 것',
+    '사내 VPN 속도가 느릴 때는 네트워크 상태와 지역 설정을 먼저 확인해보면 도움이 됩니다.',
     'text',
     ARRAY[]::text[],
     NULL,
@@ -452,8 +722,8 @@ INSERT INTO posts (
     '22222222-2222-2222-2222-222222222222',
     FALSE,
     NULL,
-    '???????????????뮻????轅붽틓??????????',
-    '????鸚룹꼳??????? ????????뮻????轅붽틓???????癲ル슢??????ル봿?? ?????癲??????? ?????댟??????癲?? ??꿔꺂?????? ??β뼯援?????????轅붽틓???곌램鍮??????觀????꿔꺂?????',
+    '복지 제도 개선 제안',
+    '이번 분기 복지 제도에 대해 만족도 설문을 받고 있어요. 불편한 점이나 개선 아이디어를 자유롭게 남겨주세요.',
     'text',
     ARRAY[]::text[],
     NULL,
@@ -474,9 +744,9 @@ INSERT INTO posts (
     'dddddddd-dddd-dddd-dddd-dddddddddddd',
     '44444444-4444-4444-4444-444444444444',
     TRUE,
-    '?????????숈????2',
-    '??????轅붽틓??????????살퓢癲??',
-    '????筌뤾쑵????轅붽틓??????????숈??????20???怨쀫뮝力????嚥싲갭큔????????낆젵. ???????щ쭢???????渦????囹??雅???????????뀀땽 ??????살퓢癲??????뉖??????깅즽????濚밸Ŧ援?.',
+    '익명-2',
+    '신규 온보딩 자료가 있으면 좋겠어요',
+    '신입 입장에서 한 번에 참고할 수 있는 온보딩 페이지가 있으면 훨씬 좋을 것 같아요.',
     'text',
     ARRAY['https://picsum.photos/seed/lunch/1200/800']::text[],
     NULL,
@@ -498,8 +768,8 @@ INSERT INTO posts (
     '55555555-5555-5555-5555-555555555555',
     FALSE,
     NULL,
-    '????????????щ쭢??????곷쿀?? ?轅붽틓??????믨퀡?????숆강???녿펾筌??',
-    '?????ㅼ뒧?????????살퓢癲???轅붽틓??????믨퀡????????轅붽틓??熬곥끇釉??ㅒ???????????????????????? ????????癲??????????밸븶???????ル봿?????????⑤뜤???ル쐠???????',
+    '사내 행사 사진 공유',
+    '지난 행사 사진을 정리해두었습니다. 참여해주신 분들 모두 감사합니다!',
     'text',
     ARRAY[]::text[],
     NULL,
@@ -517,20 +787,16 @@ INSERT INTO posts (
   ),
   (
     'e7777777-7777-7777-7777-777777777777',
-    'dddddddd-dddd-dddd-dddd-dddddddddddd',
-    '66666666-6666-6666-6666-666666666666',
+    'f4444444-4444-4444-4444-444444444444',
+    '33333333-3333-3333-3333-333333333333',
     FALSE,
     NULL,
-    '????????怨쀫뮝力??OKR ?逆???????????곷쿀??',
-    '?逆?????????筌?????쑩??낆땡???????怨뚮뼺??щ쨦?? ??????留????濚밸Ŧ寃㎩쳞???????썹땟???????鶯ㅺ동????껊븕????용츧????ロ뒌??',
+    'Q2 OKR 공유합니다',
+    '이번 분기 목표를 정리해서 공유합니다. 팀별로 참고해주시면 좋겠습니다.',
     'text',
     ARRAY[]::text[],
     'https://docs.company.demo/okr-q2',
-    jsonb_build_object(
-      'title', 'Q2 OKR ?逆??????',
-      'description', '????????怨쀫뮝力???轅붽틓??熬곥끇釉??룸????逆???????????뽯쨦??',
-      'url', 'https://docs.company.demo/okr-q2'
-    ),
+    '{"title":"Q2 OKR 공유","description":"이번 분기 목표를 정리한 문서입니다.","url":"https://docs.company.demo/okr-q2"}'::jsonb,
     6,
     0,
     0,
@@ -544,12 +810,12 @@ INSERT INTO posts (
   ),
   (
     'e8888888-8888-8888-8888-888888888888',
-    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+    'f7777777-7777-7777-7777-777777777777',
     '11111111-1111-1111-1111-111111111111',
     FALSE,
     NULL,
-    'API rate limit ????釉뚯뺏??',
-    '??? API rate limit??????釉뚯뺏?????곗뒭??????????????낆젵. ????댁삩?????ш끽維뽳쭩?????????? ??꿔꺂??틝???놁떴?????繹먭퍗爰??μ떝?띄몭??袁㏉떋???????낆젵.',
+    '취미 모임 일정 조사',
+    '저녁 러닝 모임을 열어보려고 합니다. 참여 가능하신 분들은 댓글 남겨주세요.',
     'text',
     ARRAY[]::text[],
     NULL,
@@ -609,7 +875,7 @@ INSERT INTO comments (
     NULL,
     FALSE,
     NULL,
-    '???ル봿???甕??癲ル슢????? ??? ????????????????癲???鶯ㅺ동???醫듽렒 ?????곷쿀??????繹먮굛???????',
+    '안내 감사합니다. 점검 전에 미리 작업 마무리하겠습니다.',
     4,
     FALSE,
     0,
@@ -622,7 +888,7 @@ INSERT INTO comments (
     'c1111111-1111-1111-1111-111111111111',
     FALSE,
     NULL,
-    '?????????????낆젵. ??ш끽維뽳쭩??????????살퓢?? ?????곷쿀????????貫爾?????????????낆젵.',
+    '감사합니다. 점검 중 공지사항은 별도 채널에 바로 올릴게요.',
     3,
     FALSE,
     1,
@@ -635,7 +901,7 @@ INSERT INTO comments (
     NULL,
     FALSE,
     NULL,
-    '?????轅붽틓????ш끽維???癲ル슢????? ?????怨뚯댅 ???黎앸럽???????????????ル봿?? ??逆???轅붽틓??筌뚮챶夷??????쇨덫???????ル봿???縕????',
+    '저는 오늘 국밥 생각 중인데, 같이 가실 분 있나요?',
     5,
     FALSE,
     0,
@@ -648,7 +914,7 @@ INSERT INTO comments (
     'c3333333-3333-3333-3333-333333333333',
     FALSE,
     NULL,
-    '?轅붽틓???嶺뚮∥????? ??鶯ㅺ동??????棺堉곁땟???????醫딇돮??????살퓢?????????????노듋??㉱ ????뉖???????μ떝?띄몭??←솒??????????ル봿?????????낆젵.',
+    '저도 좋아요. 점심시간 전에 메뉴 정해두죠.',
     2,
     FALSE,
     1,
@@ -661,7 +927,7 @@ INSERT INTO comments (
     NULL,
     TRUE,
     1,
-    '????????筌뤾쑵??? ????節떷?????沃섃뫖???룸???? ??????濚밸Ŧ援?. ?????????癲ル슢?????轅붽틓????????ш끽維뽳쭩????????????????ル뒇???????낆젵.',
+    '온보딩 자료 있으면 정말 도움될 것 같아요. 새로 입사한 분들도 바로 찾기 쉬울 듯합니다.',
     1,
     FALSE,
     0,
@@ -674,7 +940,7 @@ INSERT INTO comments (
     NULL,
     FALSE,
     NULL,
-    '???轅붽틓???寃멸섶? ???????癲ル슢?ο㎖?꾨쇀?????ル봿?????????????????낆젵. ?????μ쪚?????ル봿????????????ル봿???????ㅼ뒧?????????????',
+    '사진 공유 감사합니다. 다음 행사도 기대돼요!',
     2,
     FALSE,
     0,
@@ -687,7 +953,7 @@ INSERT INTO comments (
     NULL,
     FALSE,
     NULL,
-    '???筌??????癲ル슢흮?룰쑤援???ㅼ뒧?????轅붽틓??熬곥끇釉??룸???????蹂μ삏????ル봿?? ?雅?퍔瑗ⓩ뤃?? ???ㅼ뒧??????ы꺍???????????????ル봿?????????낆젵.',
+    '문서 확인했습니다. 목표가 명확해서 좋네요.',
     4,
     FALSE,
     0,
@@ -700,7 +966,7 @@ INSERT INTO comments (
     NULL,
     FALSE,
     NULL,
-    'rate limit ????釉뚯뺏?????ル봿???甕??癲ル슢????? ??ш끽維뽳쭩???????????????濚밸Ŧ?????ル봿????????룰퀬?????濚밸Ŧ援?.',
+    '러닝 모임 참여합니다. 시간만 맞으면 꼭 갈게요.',
     2,
     FALSE,
     0,
@@ -716,6 +982,36 @@ ON CONFLICT (id) DO UPDATE SET
   upvote_count = EXCLUDED.upvote_count,
   is_deleted = EXCLUDED.is_deleted,
   depth = EXCLUDED.depth,
+  created_at = EXCLUDED.created_at;
+
+-- =========================================================
+-- Votes
+-- =========================================================
+INSERT INTO votes (id, user_id, target_type, target_id, vote_type, created_at) VALUES
+  ('b1111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', 'post', 'e1111111-1111-1111-1111-111111111111', 'up', NOW() - INTERVAL '5 days'),
+  ('b2222222-2222-2222-2222-222222222222', '33333333-3333-3333-3333-333333333333', 'post', 'e2222222-2222-2222-2222-222222222222', 'up', NOW() - INTERVAL '4 days'),
+  ('b3333333-3333-3333-3333-333333333333', '44444444-4444-4444-4444-444444444444', 'comment', 'c3333333-3333-3333-3333-333333333333', 'up', NOW() - INTERVAL '4 days'),
+  ('b4444444-4444-4444-4444-444444444444', '66666666-6666-6666-6666-666666666666', 'post', 'e8888888-8888-8888-8888-888888888888', 'up', NOW() - INTERVAL '12 hours')
+ON CONFLICT (id) DO UPDATE SET
+  user_id = EXCLUDED.user_id,
+  target_type = EXCLUDED.target_type,
+  target_id = EXCLUDED.target_id,
+  vote_type = EXCLUDED.vote_type,
+  created_at = EXCLUDED.created_at;
+
+-- =========================================================
+-- Reactions
+-- =========================================================
+INSERT INTO reactions (id, user_id, post_id, comment_id, emoji, created_at) VALUES
+  ('c1111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', 'e1111111-1111-1111-1111-111111111111', NULL, '👍', NOW() - INTERVAL '5 days'),
+  ('c2222222-2222-2222-2222-222222222222', '33333333-3333-3333-3333-333333333333', 'e2222222-2222-2222-2222-222222222222', NULL, '❤️', NOW() - INTERVAL '4 days'),
+  ('c3333333-3333-3333-3333-333333333334', '44444444-4444-4444-4444-444444444444', NULL, 'c3333333-3333-3333-3333-333333333333', '👏', NOW() - INTERVAL '4 days'),
+  ('c4444444-4444-4444-4444-444444444445', '66666666-6666-6666-6666-666666666666', 'e8888888-8888-8888-8888-888888888888', NULL, '🔥', NOW() - INTERVAL '12 hours')
+ON CONFLICT (id) DO UPDATE SET
+  user_id = EXCLUDED.user_id,
+  post_id = EXCLUDED.post_id,
+  comment_id = EXCLUDED.comment_id,
+  emoji = EXCLUDED.emoji,
   created_at = EXCLUDED.created_at;
 
 -- =========================================================
@@ -741,7 +1037,7 @@ INSERT INTO notifications (
     'comment',
     'post',
     'e1111111-1111-1111-1111-111111111111',
-    '????????????????',
+    '새 댓글이 달렸습니다.',
     FALSE,
     NOW() - INTERVAL '5 days 23 hours'
   ),
@@ -753,7 +1049,7 @@ INSERT INTO notifications (
     'reply',
     'comment',
     'c1111111-1111-1111-1111-111111111111',
-    '??????????????',
+    '내 댓글에 답글이 달렸습니다.',
     FALSE,
     NOW() - INTERVAL '5 days 22 hours'
   ),
@@ -765,7 +1061,7 @@ INSERT INTO notifications (
     'comment',
     'post',
     'e2222222-2222-2222-2222-222222222222',
-    '????????????????',
+    '새 댓글이 달렸습니다.',
     FALSE,
     NOW() - INTERVAL '4 days 20 hours'
   ),
@@ -777,7 +1073,7 @@ INSERT INTO notifications (
     'reply',
     'comment',
     'c3333333-3333-3333-3333-333333333333',
-    '??????????????',
+    '내 댓글에 답글이 달렸습니다.',
     FALSE,
     NOW() - INTERVAL '4 days 18 hours'
   )
@@ -793,46 +1089,91 @@ ON CONFLICT (id) DO UPDATE SET
   created_at = EXCLUDED.created_at;
 
 -- =========================================================
--- Reports
+-- Channel requests
 -- =========================================================
-INSERT INTO reports (
+INSERT INTO channel_requests (
   id,
-  reporter_id,
-  target_type,
-  target_id,
-  reason,
+  name,
+  slug,
   description,
+  reason,
   status,
-  created_at
+  requested_by,
+  reviewed_by,
+  reviewed_at,
+  created_channel_id,
+  created_at,
+  requested_type,
+  requested_scope,
+  requested_posting_mode,
+  requested_membership_type
 ) VALUES
   (
-    'b1111111-1111-1111-1111-111111111111',
-    '11111111-1111-1111-1111-111111111111',
-    'post',
-    'e5555555-5555-5555-5555-555555555555',
-    'inappropriate',
-    '????????嶺?壤?泳?뿀?????筌먲퐣苑????????쇨덧?????ш끽維뽳쭩????癲ル슢????????ㅼ뒧???????',
+    'd1111111-1111-1111-1111-111111111111',
+    '데이터팀 게시판',
+    'data-team',
+    '데이터팀 전용 질문 및 공유 공간',
+    '팀 별도 게시판이 있으면 협업이 편해집니다.',
     'pending',
-    NOW() - INTERVAL '2 days'
+    '44444444-4444-4444-4444-444444444444',
+    NULL,
+    NULL,
+    NULL,
+    NOW() - INTERVAL '1 day',
+    'board',
+    'department',
+    'real_only',
+    'request'
   ),
   (
-    'b2222222-2222-2222-2222-222222222222',
-    '22222222-2222-2222-2222-222222222222',
-    'comment',
-    'c3333333-3333-3333-3333-333333333333',
-    'spam',
-    '???ル봿??? ?????쇨덧??????????????????꿔꺂??틝???????????밸븶???癲ル슢?????',
-    'dismissed',
-    NOW() - INTERVAL '1 day'
+    'd2222222-2222-2222-2222-222222222222',
+    '러닝 모임 공간',
+    'running-club',
+    '사내 러닝 모임을 위한 소규모 공간',
+    '취미 기반 모임을 새로 열고 싶습니다.',
+    'approved',
+    '55555555-5555-5555-5555-555555555555',
+    '11111111-1111-1111-1111-111111111111',
+    NOW() - INTERVAL '2 hours',
+    'f7777777-7777-7777-7777-777777777777',
+    NOW() - INTERVAL '3 days',
+    'space',
+    'interest',
+    'anonymous_allowed',
+    'open'
+  ),
+  (
+    'd3333333-3333-3333-3333-333333333333',
+    '비공개 연구실',
+    'private-lab',
+    '실험적인 기능을 테스트하는 비공개 공간',
+    '민감한 실험 데이터를 보호하고 싶습니다.',
+    'rejected',
+    '33333333-3333-3333-3333-333333333333',
+    '11111111-1111-1111-1111-111111111111',
+    NOW() - INTERVAL '12 hours',
+    NULL,
+    NOW() - INTERVAL '4 days',
+    'space',
+    'project',
+    'real_only',
+    'invite'
   )
 ON CONFLICT (id) DO UPDATE SET
-  reporter_id = EXCLUDED.reporter_id,
-  target_type = EXCLUDED.target_type,
-  target_id = EXCLUDED.target_id,
-  reason = EXCLUDED.reason,
+  name = EXCLUDED.name,
+  slug = EXCLUDED.slug,
   description = EXCLUDED.description,
+  reason = EXCLUDED.reason,
   status = EXCLUDED.status,
-  created_at = EXCLUDED.created_at;
+  requested_by = EXCLUDED.requested_by,
+  reviewed_by = EXCLUDED.reviewed_by,
+  reviewed_at = EXCLUDED.reviewed_at,
+  created_channel_id = EXCLUDED.created_channel_id,
+  created_at = EXCLUDED.created_at,
+  requested_type = EXCLUDED.requested_type,
+  requested_scope = EXCLUDED.requested_scope,
+  requested_posting_mode = EXCLUDED.requested_posting_mode,
+  requested_membership_type = EXCLUDED.requested_membership_type;
 
 -- =========================================================
 -- Recalculate counters
