@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { router, publicProcedure, protectedProcedure } from '../trpc.js';
-import { db, profiles, posts } from '@repo/db';
-import { eq, and, sql, ilike, or } from 'drizzle-orm';
+import { db, profiles } from '@repo/db';
+import { eq, ilike, or } from 'drizzle-orm';
 
 export const authRouter = router({
   /**
@@ -76,24 +76,6 @@ export const authRouter = router({
 
       return created;
     }),
-
-  /**
-   * Get activity stats for the current user
-   */
-  getStats: protectedProcedure.query(async ({ ctx }) => {
-    const [row] = await db
-      .select({
-        postCount: sql<number>`count(*)::int`,
-        totalUpvotes: sql<number>`coalesce(sum(upvote_count), 0)::int`,
-      })
-      .from(posts)
-      .where(and(eq(posts.authorId, ctx.userId), eq(posts.isDeleted, false)));
-
-    return {
-      postCount: row?.postCount ?? 0,
-      totalUpvotes: row?.totalUpvotes ?? 0,
-    };
-  }),
 
   /**
    * Search public profiles by display name or department

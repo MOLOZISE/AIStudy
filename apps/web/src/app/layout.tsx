@@ -5,8 +5,8 @@ import { AuthProvider } from '@/components/AuthProvider';
 import { ToastContainer } from '@/components/Toast';
 
 export const metadata: Metadata = {
-  title: 'Company Community',
-  description: 'Corporate community platform for real/anonymous discussions',
+  title: 'AI Study',
+  description: 'Excel 문제은행으로 학습하는 AI 스터디 플랫폼',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -13,7 +13,8 @@
       "Bash(awk '{print $NF}')",
       "Bash(gh pr create --title 'feat: Auto-post bot runbook \\(LM Studio + Codex\\)' --base main --head claude/heuristic-keller-eea608 --body ' *)",
       "Bash(where gh *)",
-      "PowerShell(Get-Command gh -ErrorAction SilentlyContinue)"
+      "PowerShell(Get-Command gh -ErrorAction SilentlyContinue)",
+      "Bash(pnpm type-check *)"
     ]
   }
 }

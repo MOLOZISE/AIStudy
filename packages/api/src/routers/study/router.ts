@@ -43,7 +43,6 @@ async function createWrongNote(input: {
         status: 'open',
         wrongCount: sql`${studyWrongNotes.wrongCount} + 1`,
         lastWrongAt: new Date(),
-        resolvedAt: null,
         updatedAt: new Date(),
       },
     });

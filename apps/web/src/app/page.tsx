@@ -11,7 +11,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!isLoading && user) {
-      router.replace('/home');
+      router.replace('/study');
     }
   }, [user, isLoading, router]);
 
@@ -26,8 +26,8 @@ export default function Home() {
   return (
     <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
       <div className="text-center">
-        <h1 className="text-4xl font-bold text-slate-900 mb-4">Company Community</h1>
-        <p className="text-lg text-slate-600 mb-8">실명·익명으로 자유롭게 소통하는 사내 커뮤니티</p>
+        <h1 className="text-4xl font-bold text-slate-900 mb-4">AI Study</h1>
+        <p className="text-lg text-slate-600 mb-8">Excel 문제은행으로 학습하는 AI 스터디 플랫폼</p>
         <div className="space-x-4">
           <Link
             href="/login"

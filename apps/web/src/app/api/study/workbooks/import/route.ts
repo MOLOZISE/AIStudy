@@ -51,10 +51,10 @@ async function requireUser(req: Request) {
 
 function storageClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !key) {
-    throw new Error('Supabase Storage 환경 변수가 설정되어 있지 않습니다.');
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY 환경 변수가 설정되어 있지 않습니다.');
   }
 
   return createClient(supabaseUrl, key, {
@@ -73,6 +73,9 @@ export async function POST(req: Request) {
 
     const extension = file.name.split('.').pop()?.toLowerCase();
     if (extension !== 'xlsx') return badRequest('xlsx 파일만 업로드할 수 있습니다.');
+
+    const MAX_SIZE = 20 * 1024 * 1024;
+    if (file.size > MAX_SIZE) return badRequest('파일 크기는 20MB 이하여야 합니다.');
 
     const subjectName = String(formData.get('subjectName') || file.name.replace(/\.[^.]+$/, '') || 'Excel 학습');
     const subjectSlug = safeSlug(String(formData.get('subjectSlug') || subjectName));
