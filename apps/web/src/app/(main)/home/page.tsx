@@ -24,6 +24,18 @@ export default function HomePage() {
   const newFeed = trpc.posts.getFeed.useQuery({ sort: 'new', limit: 4, offset: 0 }, { enabled: ready });
   const boardsData = trpc.channels.getList.useQuery(BOARD_LIST_QUERY, { enabled: ready });
 
+  const hotPostIds = useMemo(() => hotFeed.data?.items.map((post) => post.id) ?? [], [hotFeed.data?.items]);
+  const newPostIds = useMemo(() => newFeed.data?.items.map((post) => post.id) ?? [], [newFeed.data?.items]);
+
+  const { data: hotSavedMap = {} as Record<string, boolean> } = trpc.saves.getIsSavedMap.useQuery(
+    { postIds: hotPostIds },
+    { enabled: ready && !!user && hotPostIds.length > 0 }
+  );
+  const { data: newSavedMap = {} as Record<string, boolean> } = trpc.saves.getIsSavedMap.useQuery(
+    { postIds: newPostIds },
+    { enabled: ready && !!user && newPostIds.length > 0 }
+  );
+
   const quickBoards = useMemo(() => {
     const items = boardsData.data?.items ?? [];
     return {
@@ -128,7 +140,9 @@ export default function HomePage() {
         </div>
         {hotFeed.isLoading
           ? Array.from({ length: 5 }).map((_, i) => <PostCardSkeleton key={i} />)
-          : (hotFeed.data?.items ?? []).map((post) => <PostCard key={post.id} post={post} />)}
+          : (hotFeed.data?.items ?? []).map((post) => (
+              <PostCard key={post.id} post={post} isSaved={hotSavedMap[post.id] ?? false} />
+            ))}
         {!hotFeed.isLoading && (hotFeed.data?.items ?? []).length === 0 && (
           <p className="rounded-xl border border-dashed border-slate-200 py-8 text-center text-sm text-slate-400">
             아직 게시글이 없어요. 첫 번째 글을 작성해보세요!
@@ -146,7 +160,9 @@ export default function HomePage() {
         </div>
         {newFeed.isLoading
           ? Array.from({ length: 4 }).map((_, i) => <PostCardSkeleton key={i} />)
-          : (newFeed.data?.items ?? []).map((post) => <PostCard key={post.id} post={post} />)}
+          : (newFeed.data?.items ?? []).map((post) => (
+              <PostCard key={post.id} post={post} isSaved={newSavedMap[post.id] ?? false} />
+            ))}
       </section>
 
       {/* 둘러볼 게시판 */}

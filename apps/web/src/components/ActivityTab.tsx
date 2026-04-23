@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { trpc } from '@/lib/trpc';
 import { PostCard } from './PostCard';
 import { PostCardSkeleton } from './Skeleton';
@@ -29,6 +29,11 @@ export function ActivityTab() {
         }
       },
     }
+  );
+  const postIds = useMemo(() => allPosts.map((post) => post.id), [allPosts]);
+  const { data: savedMap = {} as Record<string, boolean> } = trpc.saves.getIsSavedMap.useQuery(
+    { postIds },
+    { enabled: postIds.length > 0 }
   );
 
   if (profileLoading) {
@@ -109,7 +114,7 @@ export function ActivityTab() {
         ) : (
           <div className="space-y-3">
             {allPosts.map((post) => (
-              <PostCard key={post.id} post={post} />
+              <PostCard key={post.id} post={post} isSaved={savedMap[post.id] ?? false} />
             ))}
             {postsData?.hasMore && (
               <button
