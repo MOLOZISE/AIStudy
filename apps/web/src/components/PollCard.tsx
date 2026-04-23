@@ -1,5 +1,6 @@
-'use client';
+"use client";
 
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { trpc } from '@/lib/trpc';
 import { useAuthStore } from '@/store/auth';
@@ -13,8 +14,25 @@ export function PollCard({ postId }: PollCardProps) {
   const router = useRouter();
   const { user } = useAuthStore();
   const utils = trpc.useContext();
+  const [shouldLoad, setShouldLoad] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
 
-  const { data, isLoading } = trpc.polls.getResults.useQuery({ postId });
+  useEffect(() => {
+    const el = cardRef.current;
+    if (!el || shouldLoad) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) setShouldLoad(true);
+      },
+      { rootMargin: '200px 0px' }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [shouldLoad]);
+
+  const { data, isLoading } = trpc.polls.getResults.useQuery({ postId }, { enabled: shouldLoad });
 
   const vote = trpc.polls.vote.useMutation({
     onSuccess: () => {
@@ -31,9 +49,22 @@ export function PollCard({ postId }: PollCardProps) {
     vote.mutate({ postId, optionId });
   }
 
+  if (!shouldLoad) {
+    return (
+      <div ref={cardRef} className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div className="h-4 w-24 rounded bg-slate-200" />
+        <div className="mt-3 space-y-2">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div key={index} className="h-10 rounded-xl bg-slate-200" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   if (isLoading) {
     return (
-      <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <div ref={cardRef} className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
         <div className="h-4 w-24 animate-pulse rounded bg-slate-200" />
         <div className="mt-3 space-y-2">
           {Array.from({ length: 3 }).map((_, index) => (
@@ -50,7 +81,7 @@ export function PollCard({ postId }: PollCardProps) {
   const totalVotes = data.totalVotes ?? 0;
 
   return (
-    <section className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+    <section ref={cardRef} className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Poll</p>
