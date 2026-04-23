@@ -1,7 +1,7 @@
 'use client';
 
 import type { CSSProperties } from 'react';
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
@@ -42,7 +42,7 @@ interface PostCardProps {
   isSaved?: boolean;
 }
 
-export function PostCard({ post, onDeleted, isSaved: isSavedProp }: PostCardProps) {
+function PostCardComponent({ post, onDeleted, isSaved: isSavedProp }: PostCardProps) {
   const { user } = useAuthStore();
   const router = useRouter();
   const utils = trpc.useContext();
@@ -270,6 +270,8 @@ export function PostCard({ post, onDeleted, isSaved: isSavedProp }: PostCardProp
     </article>
   );
 }
+
+export const PostCard = memo(PostCardComponent);
 
 function MaskIcon() {
   return (

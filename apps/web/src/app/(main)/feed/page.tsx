@@ -22,7 +22,10 @@ export default function FeedPage() {
   const [feedKey, setFeedKey] = useState(0);
   const { user } = useAuthStore();
 
-  const { data: channelsData } = trpc.channels.getList.useQuery({ limit: 50, offset: 0 });
+  const { data: channelsData } = trpc.channels.getList.useQuery(
+    { limit: 50, offset: 0 },
+    { enabled: !!channelId }
+  );
   const { data: myChannelIds, refetch: refetchMemberships } = trpc.channels.getMyMemberships.useQuery(undefined, {
     enabled: !!user,
   });

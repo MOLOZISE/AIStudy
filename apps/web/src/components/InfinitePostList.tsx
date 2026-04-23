@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, startTransition } from 'react';
 import { trpc } from '@/lib/trpc';
 import { PostCard } from './PostCard';
 import { PostCardSkeleton } from './Skeleton';
@@ -19,7 +19,7 @@ interface InfinitePostListProps {
   onStartPost?: (content?: string) => void;
 }
 
-const LIMIT = 20;
+const LIMIT = 10;
 const MAX_OFFSET = 1000;
 
 const SORT_LABELS: Record<SortOption, { label: string; hint: string }> = {
@@ -65,12 +65,14 @@ export function InfinitePostList({ channelId, flair, tag, onStartPost }: Infinit
       return;
     }
     if (!data) return;
-    if (offset === 0) {
-      setAllPosts(data.items);
-    } else {
-      setAllPosts((prev) => [...prev, ...data.items]);
-    }
-    setHasMore(data.hasMore && offset + LIMIT < MAX_OFFSET);
+    startTransition(() => {
+      if (offset === 0) {
+        setAllPosts(data.items);
+      } else {
+        setAllPosts((prev) => [...prev, ...data.items]);
+      }
+      setHasMore(data.hasMore && offset + LIMIT < MAX_OFFSET);
+    });
   }, [data, offset, isError]);
 
   useEffect(() => {

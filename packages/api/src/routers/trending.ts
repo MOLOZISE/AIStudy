@@ -1,33 +1,39 @@
 import { router, publicProcedure } from '../trpc.js';
 import { db, profiles, posts, reactions, channels, saves, postTags } from '@repo/db';
-import { and, count, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 
 export const trendingRouter = router({
   /**
    * Get high-level community stats for the feed sidebar.
    */
   getCommunityStats: publicProcedure.query(async () => {
-    const [totalMembersRow, monthlyPostsRow, monthlyReactionsRow, monthlySavesRow] = await Promise.all([
-      db.select({ count: count() }).from(profiles),
-      db
-        .select({ count: count() })
-        .from(posts)
-        .where(and(eq(posts.isDeleted, false), sql`${posts.createdAt} >= date_trunc('month', now())`)),
-      db
-        .select({ count: count() })
-        .from(reactions)
-        .where(sql`${reactions.createdAt} >= date_trunc('month', now())`),
-      db
-        .select({ count: count() })
-        .from(saves)
-        .where(sql`${saves.createdAt} >= date_trunc('month', now())`),
-    ]);
+    const [stats] = await db
+      .select({
+        totalMembers: sql<number>`(select count(*)::int from ${profiles})`,
+        monthlyPosts: sql<number>`(
+        select count(*)::int
+        from ${posts}
+        where ${posts.isDeleted} = false
+          and ${posts.createdAt} >= date_trunc('month', now())
+      )`,
+        monthlyReactions: sql<number>`(
+        select count(*)::int
+        from ${reactions}
+        where ${reactions.createdAt} >= date_trunc('month', now())
+      )`,
+        monthlySaves: sql<number>`(
+        select count(*)::int
+        from ${saves}
+        where ${saves.createdAt} >= date_trunc('month', now())
+      )`,
+      })
+      .from(sql`(select 1) as stats`);
 
     return {
-      totalMembers: totalMembersRow[0]?.count ?? 0,
-      monthlyPosts: monthlyPostsRow[0]?.count ?? 0,
-      monthlyReactions: monthlyReactionsRow[0]?.count ?? 0,
-      monthlySaves: monthlySavesRow[0]?.count ?? 0,
+      totalMembers: stats?.totalMembers ?? 0,
+      monthlyPosts: stats?.monthlyPosts ?? 0,
+      monthlyReactions: stats?.monthlyReactions ?? 0,
+      monthlySaves: stats?.monthlySaves ?? 0,
     };
   }),
 

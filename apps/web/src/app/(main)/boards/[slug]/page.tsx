@@ -109,9 +109,7 @@ export default function BoardDetailPage({
         </div>
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-4">
-        <FlairChips activeFlair={activeFlair} onChange={handleFlairChange} />
-      </section>
+      <FlairChips activeFlair={activeFlair} onChange={handleFlairChange} />
 
       <InfinitePostList
         key={feedKey}

@@ -75,8 +75,7 @@ export function Sidebar({ onNavigate, onlineUserCount = 0 }: SidebarProps = {}) 
   const [showRequestModal, setShowRequestModal] = useState(false);
   const { user } = useAuthStore();
 
-  const { data: boardsData } = trpc.channels.getList.useQuery({ limit: 50, offset: 0, type: 'board' });
-  const { data: spacesData } = trpc.channels.getList.useQuery({ limit: 50, offset: 0, type: 'space' });
+  const { data: channelsData } = trpc.channels.getList.useQuery({ limit: 100, offset: 0 });
   const { data: myChannelIds, refetch: refetchMemberships } = trpc.channels.getMyMemberships.useQuery(undefined, {
     enabled: !!user,
   });
@@ -87,8 +86,9 @@ export function Sidebar({ onNavigate, onlineUserCount = 0 }: SidebarProps = {}) 
   const leave = trpc.channels.leave.useMutation({ onSuccess: () => refetchMemberships() });
   const join = trpc.channels.join.useMutation({ onSuccess: () => refetchMemberships() });
 
-  const boards = (boardsData?.items ?? []) as ChannelItem[];
-  const spaces = (spacesData?.items ?? []) as ChannelItem[];
+  const channels = (channelsData?.items ?? []) as ChannelItem[];
+  const boards = channels.filter((channel) => channel.type === 'board');
+  const spaces = channels.filter((channel) => channel.type === 'space');
 
   const [showAllBoards, setShowAllBoards] = useState<Record<SidebarSectionKey, boolean>>({
     announcement: true,
