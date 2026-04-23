@@ -10,16 +10,23 @@ import { NotificationBell } from '@/components/NotificationBell';
 import { SearchBar } from '@/components/SearchBar';
 import { RightSidebar } from '@/components/RightSidebar';
 import { usePresence } from '@/hooks/usePresence';
-import { trpc } from '@/lib/trpc';
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { user, isLoading } = useAuthStore();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [showRightSidebar, setShowRightSidebar] = useState(false);
   const onlineUserIds = usePresence(user?.id);
-  const { data: communityStats } = trpc.trending.getCommunityStats.useQuery();
-  const { data: trendingTopics } = trpc.trending.getTrendingTopics.useQuery();
-  const { data: activeChannels } = trpc.trending.getActiveChannels.useQuery();
+
+  useEffect(() => {
+    if (!user) return;
+
+    const timer = window.setTimeout(() => {
+      setShowRightSidebar(true);
+    }, 1200);
+
+    return () => window.clearTimeout(timer);
+  }, [user]);
 
   useEffect(() => {
     if (!isLoading && !user) router.replace('/login');
@@ -112,7 +119,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           <Sidebar onlineUserCount={onlineUserIds.length} />
         </div>
         <main className="min-w-0 flex-1">{children}</main>
-        <RightSidebar stats={communityStats} topics={trendingTopics} channels={activeChannels} />
+        {showRightSidebar && <RightSidebar />}
       </div>
     </div>
   );

@@ -75,15 +75,28 @@ const UI_TEXT = {
 export function Sidebar({ onNavigate, onlineUserCount = 0 }: SidebarProps = {}) {
   const pathname = usePathname();
   const [showRequestModal, setShowRequestModal] = useState(false);
+  const [loadDirectory, setLoadDirectory] = useState(false);
   const { user } = useAuthStore();
 
-  const { data: channelsData } = trpc.channels.getList.useQuery(CHANNEL_LIST_QUERY);
+  const { data: channelsData } = trpc.channels.getList.useQuery(CHANNEL_LIST_QUERY, {
+    enabled: loadDirectory,
+  });
   const { data: myChannelIds, refetch: refetchMemberships } = trpc.channels.getMyMemberships.useQuery(undefined, {
-    enabled: !!user,
+    enabled: !!user && loadDirectory,
   });
   const { data: isAdmin = false } = trpc.channels.isAdmin.useQuery(undefined, {
-    enabled: !!user,
+    enabled: !!user && loadDirectory,
   });
+
+  useEffect(() => {
+    if (loadDirectory) return;
+
+    const timer = window.setTimeout(() => {
+      setLoadDirectory(true);
+    }, 1200);
+
+    return () => window.clearTimeout(timer);
+  }, [loadDirectory]);
 
   const leave = trpc.channels.leave.useMutation({ onSuccess: () => refetchMemberships() });
   const join = trpc.channels.join.useMutation({ onSuccess: () => refetchMemberships() });
@@ -191,10 +204,21 @@ export function Sidebar({ onNavigate, onlineUserCount = 0 }: SidebarProps = {}) 
   }, [activeDiscoverableSpaceIndex, activeJoinedSpaceIndex]);
 
   return (
-    <aside className="w-56 shrink-0">
+    <aside className="w-56 shrink-0" onMouseEnter={() => setLoadDirectory(true)}>
       {showRequestModal && <ChannelRequestModal onClose={() => setShowRequestModal(false)} />}
 
       <div className="sticky top-20 space-y-2">
+        {!loadDirectory ? (
+          <section className="rounded-lg border border-slate-200 bg-white p-3">
+            <div className="h-4 w-24 animate-pulse rounded bg-slate-200" />
+            <div className="mt-3 space-y-2">
+              <div className="h-8 animate-pulse rounded bg-slate-100" />
+              <div className="h-8 animate-pulse rounded bg-slate-100" />
+              <div className="h-8 animate-pulse rounded bg-slate-100" />
+            </div>
+          </section>
+        ) : (
+          <>
         {BOARD_SECTION_ORDER.map((section) => {
           const items = boardGroups[section.key];
           if (items.length === 0) return null;
@@ -335,6 +359,8 @@ export function Sidebar({ onNavigate, onlineUserCount = 0 }: SidebarProps = {}) 
         >
           {UI_TEXT.request}
         </button>
+          </>
+        )}
       </div>
     </aside>
   );
