@@ -25,6 +25,7 @@ function getTargetLink(postId: string | null, targetType: string | null, targetI
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [enableRealtime, setEnableRealtime] = useState(false);
+  const [shouldLoadCount, setShouldLoadCount] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const utils = trpc.useContext();
@@ -32,18 +33,8 @@ export function NotificationBell() {
 
   useRealtimeNotifications(user?.id, enableRealtime);
 
-  useEffect(() => {
-    if (!user) return;
-
-    const timer = window.setTimeout(() => {
-      setEnableRealtime(true);
-    }, 1500);
-
-    return () => window.clearTimeout(timer);
-  }, [user]);
-
   const { data: unreadCount = 0 } = trpc.notifications.getUnreadCount.useQuery(undefined, {
-    enabled: !!user && enableRealtime,
+    enabled: !!user && shouldLoadCount,
     refetchInterval: 30_000,
   });
 
@@ -80,9 +71,11 @@ export function NotificationBell() {
     <div ref={ref} className="relative">
       <button
         onClick={() => {
+          setShouldLoadCount(true);
           setEnableRealtime(true);
           setOpen((v) => !v);
         }}
+        onMouseEnter={() => setShouldLoadCount(true)}
         className="relative rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900"
         aria-label="알림"
       >
