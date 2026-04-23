@@ -1,0 +1,25 @@
+{
+  "name": "@repo/api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@repo/db": "workspace:*",
+    "@repo/types": "workspace:*",
+    "@supabase/supabase-js": "^2.38.4",
+    "@trpc/server": "^10.43.6",
+    "drizzle-orm": "^0.30.8",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@repo/typescript-config": "workspace:*",
+    "@types/node": "^20.11.5",
+    "typescript": "^5.3.3"
+  }
+}
