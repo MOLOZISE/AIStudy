@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { router, publicProcedure, protectedProcedure, assertAdmin } from '../trpc.js';
-import { db, channels, channelMembers, channelRequests, profiles } from '@repo/db';
+import { db, channels, channelMembers, channelRequests, posts, profiles } from '@repo/db';
 import { eq, desc, and, sql, ilike, or, asc, notInArray } from 'drizzle-orm';
 
 function normalizeSlug(value: string) {
@@ -55,6 +55,26 @@ export const channelsRouter = router({
           purpose: channels.purpose,
           displayOrder: channels.displayOrder,
           parentId: channels.parentId,
+          latestPostTitle: sql<string | null>`
+            (
+              select p.title
+              from ${posts} p
+              where p.channel_id = ${channels.id}
+                and p.is_deleted = false
+              order by p.created_at desc
+              limit 1
+            )
+          `,
+          topPostTitle: sql<string | null>`
+            (
+              select p.title
+              from ${posts} p
+              where p.channel_id = ${channels.id}
+                and p.is_deleted = false
+              order by p.hot_score desc, p.created_at desc
+              limit 1
+            )
+          `,
         })
         .from(channels)
         .where(where)
