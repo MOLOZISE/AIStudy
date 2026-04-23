@@ -210,19 +210,19 @@ function PostCardComponent({ post, onDeleted, isSaved: isSavedProp }: PostCardPr
         <div className="group flex items-start gap-3">
           <div className="min-w-0 flex-1">
             {post.title && (
-              <Link href={`/posts/${post.id}`} className="block">
-                <h3 className="mb-1 text-base font-semibold leading-6 text-slate-950 group-hover:text-blue-600">
-                  {post.title}
-                </h3>
-              </Link>
-            )}
+                <Link href={`/posts/${post.id}`} prefetch={false} className="block">
+                  <h3 className="mb-1 text-base font-semibold leading-6 text-slate-950 group-hover:text-blue-600">
+                    {post.title}
+                  </h3>
+                </Link>
+              )}
             <HashtagText
               text={post.content}
               className="block line-clamp-2 whitespace-pre-wrap text-sm leading-6 text-slate-600"
             />
           </div>
 
-          <Link href={`/posts/${post.id}`} className="shrink-0">
+          <Link href={`/posts/${post.id}`} prefetch={false} className="shrink-0">
             <div className="h-24 w-28 overflow-hidden rounded-lg">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={firstImage} alt="" loading="lazy" className="h-full w-full object-cover" />
@@ -232,7 +232,7 @@ function PostCardComponent({ post, onDeleted, isSaved: isSavedProp }: PostCardPr
       ) : (
         <div className="group block">
           {post.title && (
-            <Link href={`/posts/${post.id}`} className="block">
+            <Link href={`/posts/${post.id}`} prefetch={false} className="block">
               <h3 className="mb-1 text-base font-semibold leading-6 text-slate-950 group-hover:text-blue-600">
                 {post.title}
               </h3>

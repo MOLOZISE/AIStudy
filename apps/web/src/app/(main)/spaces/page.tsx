@@ -105,7 +105,7 @@ function SpaceGroup({
       <div className="divide-y divide-slate-100">
         {spaces.map((space) => (
           <div key={space.id} className="flex items-center justify-between px-5 py-4 hover:bg-slate-50">
-            <Link href={`/spaces/${space.slug}`} className="min-w-0 flex-1">
+            <Link href={`/spaces/${space.slug}`} prefetch={false} className="min-w-0 flex-1">
               <p className="truncate font-medium text-slate-900">{space.name}</p>
               {space.description && (
                 <p className="mt-0.5 truncate text-sm text-slate-500">{space.description}</p>

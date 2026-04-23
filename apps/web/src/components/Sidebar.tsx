@@ -359,6 +359,7 @@ function NavLink({
     <div className="group flex items-center rounded-md hover:bg-slate-50">
       <Link
         href={href}
+        prefetch={false}
         onClick={onClick}
         className={`flex-1 truncate px-3 py-2 text-sm transition-colors ${
           active

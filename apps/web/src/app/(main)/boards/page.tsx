@@ -91,6 +91,7 @@ function BoardGroup({ title, boards }: { title: string; boards: BoardItem[] }) {
           <Link
             key={board.id}
             href={`/boards/${board.slug}`}
+            prefetch={false}
             className="flex items-center justify-between px-5 py-4 hover:bg-slate-50"
           >
             <div className="min-w-0">
