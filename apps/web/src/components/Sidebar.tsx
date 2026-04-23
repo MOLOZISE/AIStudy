@@ -88,16 +88,6 @@ export function Sidebar({ onNavigate, onlineUserCount = 0 }: SidebarProps = {}) 
     enabled: !!user && loadDirectory,
   });
 
-  useEffect(() => {
-    if (loadDirectory) return;
-
-    const timer = window.setTimeout(() => {
-      setLoadDirectory(true);
-    }, 1200);
-
-    return () => window.clearTimeout(timer);
-  }, [loadDirectory]);
-
   const leave = trpc.channels.leave.useMutation({ onSuccess: () => refetchMemberships() });
   const join = trpc.channels.join.useMutation({ onSuccess: () => refetchMemberships() });
 
@@ -204,7 +194,12 @@ export function Sidebar({ onNavigate, onlineUserCount = 0 }: SidebarProps = {}) 
   }, [activeDiscoverableSpaceIndex, activeJoinedSpaceIndex]);
 
   return (
-    <aside className="w-56 shrink-0" onMouseEnter={() => setLoadDirectory(true)}>
+    <aside
+      className="w-56 shrink-0"
+      onPointerEnter={() => setLoadDirectory(true)}
+      onFocusCapture={() => setLoadDirectory(true)}
+      onClick={() => setLoadDirectory(true)}
+    >
       {showRequestModal && <ChannelRequestModal onClose={() => setShowRequestModal(false)} />}
 
       <div className="sticky top-20 space-y-2">

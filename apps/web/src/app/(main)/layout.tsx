@@ -15,18 +15,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   const router = useRouter();
   const { user, isLoading } = useAuthStore();
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [showRightSidebar, setShowRightSidebar] = useState(false);
   const onlineUserIds = usePresence(user?.id);
-
-  useEffect(() => {
-    if (!user) return;
-
-    const timer = window.setTimeout(() => {
-      setShowRightSidebar(true);
-    }, 1200);
-
-    return () => window.clearTimeout(timer);
-  }, [user]);
 
   useEffect(() => {
     if (!isLoading && !user) router.replace('/login');
@@ -119,7 +108,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           <Sidebar onlineUserCount={onlineUserIds.length} />
         </div>
         <main className="min-w-0 flex-1">{children}</main>
-        {showRightSidebar && <RightSidebar />}
+        <RightSidebar />
       </div>
     </div>
   );
