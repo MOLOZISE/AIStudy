@@ -1,14 +1,13 @@
 'use client';
 
-import { useState } from 'react';
 import { use } from 'react';
+import { useRouter } from 'next/navigation';
 import { InfinitePostList } from '@/components/InfinitePostList';
-import { PostCreateModal } from '@/components/PostCreateModal';
 import { trpc } from '@/lib/trpc';
 import { useAuthStore } from '@/store/auth';
 
 const MEMBERSHIP_LABELS: Record<string, string> = {
-  open: '자유 참여',
+  open: '바로 참여',
   request: '승인 후 참여',
   invite: '초대 전용',
 };
@@ -18,9 +17,8 @@ export default function SpaceDetailPage({
 }: {
   params: Promise<{ slug: string }>;
 }) {
+  const router = useRouter();
   const { slug } = use(params);
-  const [showModal, setShowModal] = useState(false);
-  const [feedKey, setFeedKey] = useState(0);
   const { user } = useAuthStore();
 
   const { data: channel, isLoading, error } = trpc.channels.getBySlug.useQuery({ slug });
@@ -31,7 +29,6 @@ export default function SpaceDetailPage({
   const leave = trpc.channels.leave.useMutation({ onSuccess: () => refetchMemberships() });
 
   const isMember = channel ? myChannelIds?.includes(channel.id) : false;
-  const initialPostingIntent = channel?.postingMode === 'anonymous_only' ? 'anonymous' : 'real';
 
   if (isLoading) {
     return (
@@ -45,7 +42,7 @@ export default function SpaceDetailPage({
   if (error || !channel) {
     return (
       <div className="rounded-lg border border-red-200 bg-red-50 p-6 text-center text-sm text-red-700">
-        공간을 찾을 수 없습니다.
+        공간을 찾을 수 없어요.
       </div>
     );
   }
@@ -68,17 +65,17 @@ export default function SpaceDetailPage({
               <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{channel.description}</p>
             )}
             <p className="mt-3 text-xs text-indigo-600">
-              {(channel.memberCount ?? 0).toLocaleString()}명 참여 중 · {(channel.postCount ?? 0).toLocaleString()}개 글
+              {(channel.memberCount ?? 0).toLocaleString()}명 참여 · {(channel.postCount ?? 0).toLocaleString()}개 글
             </p>
           </div>
           <div className="flex shrink-0 flex-col gap-2 sm:items-end">
             {isMember ? (
               <>
                 <button
-                  onClick={() => setShowModal(true)}
+                  onClick={() => router.push(`/compose?channel=${channel.id}`)}
                   className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
                 >
-                  새 글 작성
+                  글쓰기
                 </button>
                 <button
                   onClick={() => channel && leave.mutate({ channelId: channel.id })}
@@ -101,19 +98,9 @@ export default function SpaceDetailPage({
       </section>
 
       <InfinitePostList
-        key={feedKey}
         channelId={channel.id}
-        onStartPost={() => setShowModal(true)}
+        onStartPost={() => router.push(`/compose?channel=${channel.id}`)}
       />
-
-      {showModal && (
-        <PostCreateModal
-          onClose={() => setShowModal(false)}
-          onCreated={() => { setFeedKey((k) => k + 1); setShowModal(false); }}
-          defaultChannelId={channel.id}
-          initialPostingIntent={initialPostingIntent}
-        />
-      )}
     </div>
   );
 }

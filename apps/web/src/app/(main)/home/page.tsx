@@ -2,19 +2,17 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { trpc } from '@/lib/trpc';
 import { useAuthStore } from '@/store/auth';
 import { PostCard } from '@/components/PostCard';
 import { PostCardSkeleton } from '@/components/Skeleton';
-import { PostCreateModal } from '@/components/PostCreateModal';
 import { normalizeBoardSection } from '@/lib/channel-groups';
 
 export default function HomePage() {
+  const router = useRouter();
   const { user } = useAuthStore();
   const [ready, setReady] = useState(false);
-  const [showModal, setShowModal] = useState(false);
-  const [postingIntent, setPostingIntent] = useState<'real' | 'anonymous'>('real');
-  const utils = trpc.useContext();
 
   useEffect(() => {
     setReady(true);
@@ -41,43 +39,32 @@ export default function HomePage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (user as any)?.user_metadata?.full_name ?? user?.email?.split('@')[0] ?? '회원';
 
-  function handleCreated() {
-    utils.posts.getFeed.invalidate();
-    utils.channels.getHomeBoards.invalidate();
-    setShowModal(false);
-  }
-
-  function openComposer(intent: 'real' | 'anonymous') {
-    setPostingIntent(intent);
-    setShowModal(true);
+  function openCompose(intent: 'real' | 'anonymous') {
+    router.push(`/compose?intent=${intent}`);
   }
 
   const quickLinks = [
     {
-      label: '모아보기',
-      desc: '인기 게시판 보기',
-      icon: '🔥',
+      label: '인기 글',
+      desc: '지금 가장 뜨거운 글을 확인해요',
       href: '/popular',
       accent: 'border-orange-100 bg-orange-50 hover:bg-orange-100 text-orange-700',
     },
     {
       label: '공지사항',
-      desc: '회사 공지 확인',
-      icon: '📌',
+      desc: '전체 공지를 빠르게 확인해요',
       href: quickBoards.announcement ? `/boards/${quickBoards.announcement.slug}` : '/boards?section=announcement',
       accent: 'border-blue-100 bg-blue-50 hover:bg-blue-100 text-blue-700',
     },
     {
       label: '익명게시판',
-      desc: '익명으로 이야기하기',
-      icon: '🕶️',
+      desc: '익명으로 이야기하는 공간',
       href: quickBoards.anonymous ? `/boards/${quickBoards.anonymous.slug}` : '/boards?section=anonymous',
       accent: 'border-amber-100 bg-amber-50 hover:bg-amber-100 text-amber-700',
     },
     {
-      label: '게시판 둘러보기',
-      desc: '전체 게시판 확인',
-      icon: '🗂️',
+      label: '게시판 전체보기',
+      desc: '전체 게시판을 둘러봐요',
       href: '/boards',
       accent: 'border-emerald-100 bg-emerald-50 hover:bg-emerald-100 text-emerald-700',
     },
@@ -88,20 +75,20 @@ export default function HomePage() {
       <section className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 via-white to-sky-50 p-6">
         <p className="text-xs font-semibold uppercase tracking-widest text-blue-500">Company Community</p>
         <h1 className="mt-1 text-xl font-bold text-slate-950">
-          {displayName}님, 오늘은 어떤 이야기를 볼까요?
+          {displayName}님, 오늘은 어떤 이야기를 남길까요?
         </h1>
         <p className="mt-1.5 text-sm leading-6 text-slate-500">
-          게시판, 공지, 익명 이야기, 인기 글을 한곳에서 빠르게 확인해보세요.
+          게시판, 공지, 익명 이야기, 인기 글을 한곳에서 빠르게 확인해 보세요.
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           <button
-            onClick={() => openComposer('anonymous')}
+            onClick={() => openCompose('anonymous')}
             className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
           >
             익명으로 글쓰기
           </button>
           <button
-            onClick={() => openComposer('real')}
+            onClick={() => openCompose('real')}
             className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100"
           >
             실명으로 글쓰기
@@ -116,7 +103,6 @@ export default function HomePage() {
             href={item.href}
             className={`flex flex-col gap-1.5 rounded-xl border p-4 transition-colors ${item.accent}`}
           >
-            <span className="text-xl">{item.icon}</span>
             <span className="text-sm font-semibold">{item.label}</span>
             <span className="text-xs opacity-70">{item.desc}</span>
           </Link>
@@ -125,7 +111,7 @@ export default function HomePage() {
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-bold text-slate-950">🔥 핫한 글 5개</h2>
+          <h2 className="text-base font-bold text-slate-950">인기 글 5개</h2>
           <Link href="/popular" className="text-xs font-medium text-blue-600 hover:text-blue-700">
             더보기
           </Link>
@@ -139,7 +125,7 @@ export default function HomePage() {
           ))
         ) : (
           <p className="rounded-xl border border-dashed border-slate-200 py-8 text-center text-sm text-slate-400">
-            아직 핫한 글이 없어요. 첫 번째 글을 작성해보세요!
+            아직 인기 글이 없어요. 첫 번째 글을 작성해보세요.
           </p>
         )}
       </section>
@@ -170,22 +156,12 @@ export default function HomePage() {
                 {board.description && (
                   <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{board.description}</p>
                 )}
-                <p className="mt-2 text-xs text-slate-400">
-                  {(board.postCount ?? 0).toLocaleString()}개 글
-                </p>
+                <p className="mt-2 text-xs text-slate-400">{(board.postCount ?? 0).toLocaleString()}개 글</p>
               </Link>
             ))}
           </div>
         )}
       </section>
-
-      {showModal && (
-        <PostCreateModal
-          onClose={() => setShowModal(false)}
-          onCreated={handleCreated}
-          initialPostingIntent={postingIntent}
-        />
-      )}
     </div>
   );
 }

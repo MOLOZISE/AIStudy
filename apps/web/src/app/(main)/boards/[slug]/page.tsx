@@ -1,8 +1,8 @@
 'use client';
 
-import { use, useState, type ReactNode } from 'react';
+import { use, type ReactNode } from 'react';
 import { InfinitePostList } from '@/components/InfinitePostList';
-import { PostCreateModal } from '@/components/PostCreateModal';
+import { useRouter } from 'next/navigation';
 import { trpc } from '@/lib/trpc';
 
 const POSTING_MODE_LABELS: Record<string, string> = {
@@ -17,11 +17,9 @@ export default function BoardDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = use(params);
-  const [showModal, setShowModal] = useState(false);
-  const [feedKey, setFeedKey] = useState(0);
+  const router = useRouter();
 
   const { data: channel, isLoading, error } = trpc.channels.getBySlug.useQuery({ slug });
-  const initialPostingIntent = channel?.postingMode === 'anonymous_only' ? 'anonymous' : 'real';
 
   function BoardShell({ children }: { children: ReactNode }) {
     return (
@@ -72,7 +70,7 @@ export default function BoardDetailPage({
             </p>
           </div>
           <button
-            onClick={() => setShowModal(true)}
+            onClick={() => router.push(`/compose?channel=${channel.id}`)}
             className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
           >
             글 작성
@@ -81,22 +79,9 @@ export default function BoardDetailPage({
       </section>
 
       <InfinitePostList
-        key={feedKey}
         channelId={channel.id}
-        onStartPost={() => setShowModal(true)}
+        onStartPost={() => router.push(`/compose?channel=${channel.id}`)}
       />
-
-      {showModal && (
-        <PostCreateModal
-          onClose={() => setShowModal(false)}
-          onCreated={() => {
-            setFeedKey((k) => k + 1);
-            setShowModal(false);
-          }}
-          defaultChannelId={channel.id}
-          initialPostingIntent={initialPostingIntent}
-        />
-      )}
     </BoardShell>
   );
 }

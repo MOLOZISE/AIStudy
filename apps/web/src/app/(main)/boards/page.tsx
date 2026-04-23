@@ -1,10 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useMemo } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { trpc } from '@/lib/trpc';
-import { PostCreateModal } from '@/components/PostCreateModal';
 import {
   BOARD_SECTION_ORDER,
   BOARD_SECTION_TABS,
@@ -30,17 +29,17 @@ const PURPOSE_LABELS: Record<string, string> = {
   discussion: '토론',
   knowledge: '지식',
   announcement: '공지',
-  social: '소통',
+  social: '소셜',
 };
 
 const SORT_LABELS: Record<string, string> = {
-  latest: '최근',
+  latest: '최신',
   hot: '인기',
   pinned: '고정',
 };
 
 export default function BoardsPage() {
-  const [showModal, setShowModal] = useState(false);
+  const router = useRouter();
   const searchParams = useSearchParams();
   const sectionParam = searchParams.get('section');
 
@@ -71,14 +70,14 @@ export default function BoardsPage() {
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/60">Boards</p>
               <h1 className="mt-2 text-3xl font-bold tracking-tight">게시판 전체</h1>
               <p className="mt-3 text-sm leading-6 text-white/75">
-                주제별 게시판을 빠르게 훑고, 각 게시판에서 글을 확인해보세요.
+                원하는 게시판을 빠르게 보고, 바로 글쓰기로 이어가세요.
               </p>
             </div>
             <button
-              onClick={() => setShowModal(true)}
+              onClick={() => router.push('/compose')}
               className="shrink-0 rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-900 transition-colors hover:bg-blue-50"
             >
-              글 쓰기
+              글쓰기
             </button>
           </div>
         </div>
@@ -117,7 +116,7 @@ export default function BoardsPage() {
 
       {isLoading ? (
         <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-400">
-          게시판 목록 불러오는 중...
+          게시판 목록을 불러오는 중...
         </div>
       ) : visibleBoards.length > 0 ? (
         <section className="space-y-4">
@@ -146,11 +145,9 @@ export default function BoardsPage() {
         </section>
       ) : (
         <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-400">
-          아직 게시판이 없어요. 관리자에게 새 게시판 개설을 요청해보세요.
+          아직 게시판이 없어요.
         </div>
       )}
-
-      {showModal && <PostCreateModal onClose={() => setShowModal(false)} onCreated={() => setShowModal(false)} />}
     </div>
   );
 }
@@ -190,7 +187,7 @@ function BoardCard({ board }: { board: BoardItem }) {
           </h3>
 
           <p className="mt-1 line-clamp-2 text-sm leading-6 text-slate-500">
-            {board.description ?? sectionConfig?.description ?? '게시판 소개가 아직 없어요.'}
+            {board.description ?? sectionConfig?.description ?? '설명이 없는 게시판이에요.'}
           </p>
         </div>
 

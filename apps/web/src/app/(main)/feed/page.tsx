@@ -1,19 +1,17 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useMemo } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { InfinitePostList } from '@/components/InfinitePostList';
-import { PostCreateModal } from '@/components/PostCreateModal';
 import { OnboardingCard } from '@/components/OnboardingCard';
 import { trpc } from '@/lib/trpc';
 import { useAuthStore } from '@/store/auth';
 import { usePresence } from '@/hooks/usePresence';
 
 export default function FeedPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const channelId = searchParams.get('channel') ?? undefined;
-  const [showModal, setShowModal] = useState(false);
-  const [feedKey, setFeedKey] = useState(0);
   const { user } = useAuthStore();
 
   const { data: channel } = trpc.channels.getById.useQuery({ id: channelId ?? '' }, { enabled: !!channelId });
@@ -23,20 +21,15 @@ export default function FeedPage() {
   const join = trpc.channels.join.useMutation({ onSuccess: () => refetchMemberships() });
   const leave = trpc.channels.leave.useMutation({ onSuccess: () => refetchMemberships() });
 
-  const activeChannel = useMemo(
-    () => channel ?? null,
-    [channel]
-  );
-  const initialPostingIntent = activeChannel?.postingMode === 'anonymous_only' ? 'anonymous' : 'real';
-
+  const activeChannel = useMemo(() => channel ?? null, [channel]);
   const isSpace = activeChannel?.type === 'space';
   const isMember = channelId ? myChannelIds?.includes(channelId) : false;
   const presenceRoom = channelId ? `channel:${channelId}` : 'feed:global';
   const onlineUserIds = usePresence(user?.id, presenceRoom);
   const presenceLabel = activeChannel?.name ?? '전체 피드';
 
-  function handleCreated() {
-    setFeedKey((key) => key + 1);
+  function openCompose() {
+    router.push(channelId ? `/compose?channel=${channelId}` : '/compose');
   }
 
   function FeedShell({ children }: { children: React.ReactNode }) {
@@ -51,25 +44,23 @@ export default function FeedPage() {
         <section className="rounded-[var(--cc-radius-card)] border border-slate-200 bg-white p-5 shadow-[var(--cc-shadow-soft)]">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">전체 보드</p>
-              <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950">회사 커뮤니티 보드</h1>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">전체 피드</p>
+              <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950">회사 커뮤니티 피드</h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-                지금 가장 많이 오가는 글과 채널을 한 화면에서 볼 수 있습니다.
+                지금 가장 많이 보는 글과 채널을 한곳에서 확인할 수 있어요.
               </p>
-              <PresenceBadge label="지금 이 피드에" count={onlineUserIds.length} />
+              <PresenceBadge label="지금 접속한 사용자" count={onlineUserIds.length} />
             </div>
             <button
-              onClick={() => setShowModal(true)}
+              onClick={openCompose}
               className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
             >
-              글 작성
+              글쓰기
             </button>
           </div>
         </section>
 
-        <InfinitePostList key={feedKey} onStartPost={() => setShowModal(true)} />
-
-        {showModal && <PostCreateModal onClose={() => setShowModal(false)} onCreated={handleCreated} />}
+        <InfinitePostList onStartPost={openCompose} />
       </FeedShell>
     );
   }
@@ -81,9 +72,7 @@ export default function FeedPage() {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-wide text-indigo-500">공간</p>
-              <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950">
-                {activeChannel?.name ?? '공간'}
-              </h1>
+              <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950">{activeChannel?.name ?? '공간'}</h1>
               {activeChannel?.description && (
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{activeChannel.description}</p>
               )}
@@ -92,17 +81,17 @@ export default function FeedPage() {
                 <span>·</span>
                 <span>{(activeChannel?.postCount ?? 0).toLocaleString()}개 글</span>
               </div>
-              <PresenceBadge label={`지금 ${presenceLabel}에`} count={onlineUserIds.length} tone="indigo" />
+              <PresenceBadge label={`지금 ${presenceLabel}에 있는 사용자`} count={onlineUserIds.length} tone="indigo" />
             </div>
 
             <div className="flex shrink-0 flex-col gap-2 sm:items-end">
               {isMember ? (
                 <>
                   <button
-                    onClick={() => setShowModal(true)}
+                    onClick={openCompose}
                     className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
                   >
-                    글 작성
+                    글쓰기
                   </button>
                   <button
                     onClick={() => channelId && leave.mutate({ channelId })}
@@ -123,20 +112,7 @@ export default function FeedPage() {
           </div>
         </section>
 
-        <InfinitePostList
-          key={feedKey}
-          channelId={channelId}
-          onStartPost={() => setShowModal(true)}
-        />
-
-        {showModal && (
-          <PostCreateModal
-            onClose={() => setShowModal(false)}
-            onCreated={handleCreated}
-            defaultChannelId={channelId}
-            initialPostingIntent={initialPostingIntent}
-          />
-        )}
+        <InfinitePostList channelId={channelId} onStartPost={openCompose} />
       </FeedShell>
     );
   }
@@ -147,45 +123,31 @@ export default function FeedPage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
-              {activeChannel ? '게시판' : '전체 보드'}
+              {activeChannel ? '게시판' : '전체 피드'}
             </p>
             <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950">
-              {activeChannel?.name ?? '회사 커뮤니티 보드'}
+              {activeChannel?.name ?? '회사 커뮤니티 피드'}
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-              {activeChannel?.description ?? '게시판별 글을 빠르게 확인할 수 있습니다.'}
+              {activeChannel?.description ?? '게시판별 글을 빠르게 확인할 수 있어요.'}
             </p>
             {activeChannel && (
               <div className="mt-2 text-xs text-slate-400">
-                {(activeChannel.memberCount ?? 0).toLocaleString()}명 · {(activeChannel.postCount ?? 0).toLocaleString()}
-                개 글
+                {(activeChannel.memberCount ?? 0).toLocaleString()}명 · {(activeChannel.postCount ?? 0).toLocaleString()}개 글
               </div>
             )}
-            <PresenceBadge label={`지금 ${presenceLabel}에`} count={onlineUserIds.length} />
+            <PresenceBadge label={`지금 ${presenceLabel}에 있는 사용자`} count={onlineUserIds.length} />
           </div>
           <button
-            onClick={() => setShowModal(true)}
+            onClick={openCompose}
             className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
           >
-            글 작성
+            글쓰기
           </button>
         </div>
       </section>
 
-      <InfinitePostList
-        key={feedKey}
-        channelId={channelId}
-        onStartPost={() => setShowModal(true)}
-      />
-
-      {showModal && (
-        <PostCreateModal
-          onClose={() => setShowModal(false)}
-          onCreated={handleCreated}
-          defaultChannelId={channelId}
-          initialPostingIntent={initialPostingIntent}
-        />
-      )}
+      <InfinitePostList channelId={channelId} onStartPost={openCompose} />
     </FeedShell>
   );
 }

@@ -1,17 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useMemo } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { trpc } from '@/lib/trpc';
-import { PostCreateModal } from '@/components/PostCreateModal';
 import { useAuthStore } from '@/store/auth';
-import {
-  SPACE_FILTER_TABS,
-  formatChannelHighlight,
-  getSpaceFilterHref,
-} from '@/lib/channel-groups';
 import { SPACE_LIST_QUERY } from '@/lib/channel-directory';
+import { SPACE_FILTER_TABS, formatChannelHighlight, getSpaceFilterHref } from '@/lib/channel-groups';
 
 type SpaceItem = {
   id: string;
@@ -34,7 +29,7 @@ const MEMBERSHIP_LABELS: Record<string, string> = {
 };
 
 export default function SpacesPage() {
-  const [showModal, setShowModal] = useState(false);
+  const router = useRouter();
   const { user } = useAuthStore();
   const searchParams = useSearchParams();
 
@@ -64,17 +59,16 @@ export default function SpacesPage() {
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-2xl">
               <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-white/60">Spaces</p>
-              <h1 className="mt-2 text-3xl font-bold tracking-tight">소모임</h1>
+              <h1 className="mt-2 text-3xl font-bold tracking-tight">공간</h1>
               <p className="mt-3 text-sm leading-6 text-white/75">
-                참여 중인 모임과 새로 들어갈 수 있는 공간을 분리해서 보여드립니다. 지금 내 활동 영역을 더
-                빠르게 찾을 수 있어요.
+                참여 중인 공간과 새로 참여할 수 있는 공간을 한눈에 볼 수 있어요.
               </p>
             </div>
             <button
-              onClick={() => setShowModal(true)}
+              onClick={() => router.push('/compose')}
               className="shrink-0 rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-900 transition-colors hover:bg-indigo-50"
             >
-              새 글 작성
+              글쓰기
             </button>
           </div>
         </div>
@@ -110,7 +104,7 @@ export default function SpacesPage() {
 
       {isLoading ? (
         <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-400">
-          소모임 목록 불러오는 중...
+          공간 목록을 불러오는 중...
         </div>
       ) : (
         <>
@@ -120,7 +114,7 @@ export default function SpacesPage() {
               subtitle="내가 이미 들어가 있는 공간"
               tone="indigo"
               spaces={visibleJoinedSpaces}
-              emptyLabel="참여 중인 소모임이 없습니다."
+              emptyLabel="참여 중인 공간이 없어요."
               joined
               onJoin={(id) => join.mutate({ channelId: id })}
             />
@@ -129,10 +123,10 @@ export default function SpacesPage() {
           {activeView !== 'joined' && (
             <SpaceGroup
               title="참여 가능"
-              subtitle="바로 들어갈 수 있거나 요청 가능한 공간"
+              subtitle="지금 바로 들어갈 수 있는 공간"
               tone="emerald"
               spaces={visibleDiscoverableSpaces}
-              emptyLabel="참여 가능한 소모임이 없습니다."
+              emptyLabel="참여 가능한 공간이 없어요."
               joined={false}
               onJoin={(id) => join.mutate({ channelId: id })}
             />
@@ -140,13 +134,11 @@ export default function SpacesPage() {
 
           {spaces.length === 0 && (
             <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-400">
-              아직 소모임이 없습니다. 관리자에게 개설을 요청해보세요.
+              아직 공간이 없어요. 관리자에게 새 공간 개설을 요청해보세요.
             </div>
           )}
         </>
       )}
-
-      {showModal && <PostCreateModal onClose={() => setShowModal(false)} onCreated={() => setShowModal(false)} />}
     </div>
   );
 }
@@ -237,11 +229,9 @@ function SpaceCard({
           </div>
 
           <h3 className="mt-3 text-lg font-semibold tracking-tight text-slate-950">{space.name}</h3>
-
           <p className="mt-1 line-clamp-2 text-sm leading-6 text-slate-500">
-            {space.description ?? '프로젝트, 스터디, 취미 모임이 모여 있는 공간입니다.'}
+            {space.description ?? '설명이 없는 공간이에요.'}
           </p>
-
           <p className="mt-3 text-sm font-medium text-slate-800">{highlight}</p>
         </Link>
 
@@ -274,8 +264,6 @@ function StatChip({ label, value }: { label: string; value: number }) {
 
 function getSpaceHighlight(space: SpaceItem) {
   const preferred = space.topPostTitle ?? space.latestPostTitle;
-  if (preferred) {
-    return `핫한 글 · ${formatChannelHighlight(preferred)}`;
-  }
-  return `공간 소개 · ${formatChannelHighlight(space.description ?? '지금 올라온 글이 없는 공간입니다.')}`;
+  if (preferred) return `최근 글 · ${formatChannelHighlight(preferred)}`;
+  return `공간 소개 · ${formatChannelHighlight(space.description ?? '지금 만들어가는 공간이에요.')}`;
 }
