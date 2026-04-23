@@ -35,9 +35,7 @@ export default function HomePage() {
     };
   }, [boardsData.data]);
 
-  const displayName =
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (user as any)?.user_metadata?.full_name ?? user?.email?.split('@')[0] ?? '회원';
+  const displayName = user?.user_metadata?.full_name ?? user?.email?.split('@')[0] ?? '회원';
 
   function openCompose(intent: 'real' | 'anonymous') {
     router.push(`/compose?intent=${intent}`);

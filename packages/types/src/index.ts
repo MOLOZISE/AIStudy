@@ -138,3 +138,5 @@ export interface Report {
   status: ReportStatus;
   createdAt: Date;
 }
+
+export * from './study.js';

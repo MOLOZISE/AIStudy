@@ -10,6 +10,7 @@ import { reactionsRouter } from './reactions.js';
 import { trendingRouter } from './trending.js';
 import { savesRouter } from './saves.js';
 import { pollsRouter } from './polls.js';
+import { studyRouter } from './study/router.js';
 
 export const appRouter = router({
   auth: authRouter,
@@ -23,6 +24,7 @@ export const appRouter = router({
   trending: trendingRouter,
   saves: savesRouter,
   polls: pollsRouter,
+  study: studyRouter,
 });
 
 export type AppRouter = typeof appRouter;

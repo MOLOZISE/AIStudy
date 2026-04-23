@@ -575,3 +575,5 @@ export const channelRequestsRelations = relations(channelRequests, ({ one }) => 
     references: [channels.id],
   }),
 }));
+
+export * from './study.js';
