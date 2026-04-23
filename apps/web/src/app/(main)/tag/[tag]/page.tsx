@@ -60,5 +60,12 @@ export default function TagPage({ params }: { params: Promise<{ tag: string }> }
 }
 
 function normalizeTag(value: string) {
-  return value.replace(/^#/, '').trim().toLowerCase();
+  const cleaned = value.replace(/^#/, '').trim();
+  if (!cleaned) return '';
+
+  try {
+    return decodeURIComponent(cleaned).toLowerCase();
+  } catch {
+    return cleaned.toLowerCase();
+  }
 }

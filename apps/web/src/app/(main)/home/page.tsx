@@ -13,6 +13,7 @@ export default function HomePage() {
   const { user } = useAuthStore();
   const [ready, setReady] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [postingIntent, setPostingIntent] = useState<'real' | 'anonymous'>('real');
   const utils = trpc.useContext();
 
   useEffect(() => {
@@ -42,7 +43,13 @@ export default function HomePage() {
 
   function handleCreated() {
     utils.posts.getFeed.invalidate();
+    utils.channels.getHomeBoards.invalidate();
     setShowModal(false);
+  }
+
+  function openComposer(intent: 'real' | 'anonymous') {
+    setPostingIntent(intent);
+    setShowModal(true);
   }
 
   const quickLinks = [
@@ -88,13 +95,13 @@ export default function HomePage() {
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           <button
-            onClick={() => setShowModal(true)}
+            onClick={() => openComposer('anonymous')}
             className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
           >
             익명으로 글쓰기
           </button>
           <button
-            onClick={() => setShowModal(true)}
+            onClick={() => openComposer('real')}
             className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800 hover:bg-amber-100"
           >
             실명으로 글쓰기
@@ -172,7 +179,13 @@ export default function HomePage() {
         )}
       </section>
 
-      {showModal && <PostCreateModal onClose={() => setShowModal(false)} onCreated={handleCreated} />}
+      {showModal && (
+        <PostCreateModal
+          onClose={() => setShowModal(false)}
+          onCreated={handleCreated}
+          initialPostingIntent={postingIntent}
+        />
+      )}
     </div>
   );
 }

@@ -85,8 +85,9 @@ export const channelsRouter = router({
     }),
 
   /**
-   * Lightweight board summary list for the home page.
-   * Avoids expensive per-channel post title subqueries.
+   * Lightweight board summary list for the home page and board directory.
+   * Avoids expensive per-channel post title subqueries while still returning
+   * the full board taxonomy so section counts stay accurate.
    */
   getHomeBoards: publicProcedure.query(async () => {
     const items = await db
@@ -101,7 +102,7 @@ export const channelsRouter = router({
       .from(channels)
       .where(eq(channels.type, 'board'))
       .orderBy(asc(channels.displayOrder), desc(channels.memberCount))
-      .limit(20);
+      .limit(100);
 
     return { items, hasMore: false };
   }),

@@ -60,7 +60,14 @@ function generateDeterministicAlias(anonymousSeed: string, postId: string): stri
 const HASHTAG_PATTERN = /#([\p{L}\p{N}_]+)/gu;
 
 function normalizeTag(tag: string): string {
-  return tag.trim().replace(/^#/, '').toLowerCase();
+  const cleaned = tag.trim().replace(/^#/, '');
+  if (!cleaned) return '';
+
+  try {
+    return decodeURIComponent(cleaned).toLowerCase();
+  } catch {
+    return cleaned.toLowerCase();
+  }
 }
 
 function extractPostTags(content: string): string[] {

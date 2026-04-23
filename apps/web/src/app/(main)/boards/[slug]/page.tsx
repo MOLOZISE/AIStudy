@@ -21,6 +21,7 @@ export default function BoardDetailPage({
   const [feedKey, setFeedKey] = useState(0);
 
   const { data: channel, isLoading, error } = trpc.channels.getBySlug.useQuery({ slug });
+  const initialPostingIntent = channel?.postingMode === 'anonymous_only' ? 'anonymous' : 'real';
 
   function BoardShell({ children }: { children: ReactNode }) {
     return (
@@ -93,6 +94,7 @@ export default function BoardDetailPage({
             setShowModal(false);
           }}
           defaultChannelId={channel.id}
+          initialPostingIntent={initialPostingIntent}
         />
       )}
     </BoardShell>

@@ -31,6 +31,7 @@ export default function SpaceDetailPage({
   const leave = trpc.channels.leave.useMutation({ onSuccess: () => refetchMemberships() });
 
   const isMember = channel ? myChannelIds?.includes(channel.id) : false;
+  const initialPostingIntent = channel?.postingMode === 'anonymous_only' ? 'anonymous' : 'real';
 
   if (isLoading) {
     return (
@@ -110,6 +111,7 @@ export default function SpaceDetailPage({
           onClose={() => setShowModal(false)}
           onCreated={() => { setFeedKey((k) => k + 1); setShowModal(false); }}
           defaultChannelId={channel.id}
+          initialPostingIntent={initialPostingIntent}
         />
       )}
     </div>

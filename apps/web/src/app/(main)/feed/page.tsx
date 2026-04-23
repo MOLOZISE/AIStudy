@@ -27,6 +27,7 @@ export default function FeedPage() {
     () => channel ?? null,
     [channel]
   );
+  const initialPostingIntent = activeChannel?.postingMode === 'anonymous_only' ? 'anonymous' : 'real';
 
   const isSpace = activeChannel?.type === 'space';
   const isMember = channelId ? myChannelIds?.includes(channelId) : false;
@@ -133,6 +134,7 @@ export default function FeedPage() {
             onClose={() => setShowModal(false)}
             onCreated={handleCreated}
             defaultChannelId={channelId}
+            initialPostingIntent={initialPostingIntent}
           />
         )}
       </FeedShell>
@@ -181,6 +183,7 @@ export default function FeedPage() {
           onClose={() => setShowModal(false)}
           onCreated={handleCreated}
           defaultChannelId={channelId}
+          initialPostingIntent={initialPostingIntent}
         />
       )}
     </FeedShell>
