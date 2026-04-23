@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { router, publicProcedure, protectedProcedure } from '../trpc.js';
 import { db, reactions } from '@repo/db';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, inArray } from 'drizzle-orm';
 
 const ALLOWED_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '😡'] as const;
 type Emoji = (typeof ALLOWED_EMOJIS)[number];
@@ -19,11 +19,8 @@ export const reactionsRouter = router({
         .where(eq(reactions.postId, input.postId))
         .groupBy(reactions.emoji);
 
-      // Build a full map with zeros for emojis with no reactions
-      const map: Record<string, number> = Object.fromEntries(
-        ALLOWED_EMOJIS.map((e) => [e, 0])
-      );
-      for (const r of rows) map[r.emoji] = r.count;
+      const map: Record<string, number> = Object.fromEntries(ALLOWED_EMOJIS.map((emoji) => [emoji, 0]));
+      for (const row of rows) map[row.emoji] = row.count;
       return map as Record<Emoji, number>;
     }),
 
@@ -39,6 +36,55 @@ export const reactionsRouter = router({
         .where(and(eq(reactions.userId, ctx.userId), eq(reactions.postId, input.postId)))
         .limit(1);
       return (row?.emoji ?? null) as Emoji | null;
+    }),
+
+  /**
+   * Batch fetch emoji reaction counts for multiple posts.
+   */
+  getForPosts: publicProcedure
+    .input(z.object({ postIds: z.array(z.string()).max(100).default([]) }))
+    .query(async ({ input }) => {
+      if (input.postIds.length === 0) return {};
+
+      const rows = await db
+        .select({
+          postId: reactions.postId,
+          emoji: reactions.emoji,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(reactions)
+        .where(inArray(reactions.postId, input.postIds))
+        .groupBy(reactions.postId, reactions.emoji);
+
+      const result: Record<string, Record<Emoji, number>> = {};
+      for (const postId of input.postIds) {
+        result[postId] = Object.fromEntries(ALLOWED_EMOJIS.map((emoji) => [emoji, 0])) as Record<Emoji, number>;
+      }
+
+      for (const row of rows) {
+        if (!row.postId) continue;
+        const postMap =
+          result[row.postId] ?? (result[row.postId] = Object.fromEntries(ALLOWED_EMOJIS.map((emoji) => [emoji, 0])) as Record<Emoji, number>);
+        postMap[row.emoji as Emoji] = row.count;
+      }
+
+      return result;
+    }),
+
+  /**
+   * Batch fetch the current user's reaction for multiple posts.
+   */
+  getMyReactionsForPosts: protectedProcedure
+    .input(z.object({ postIds: z.array(z.string()).max(100).default([]) }))
+    .query(async ({ input, ctx }) => {
+      if (input.postIds.length === 0) return {};
+
+      const rows = await db
+        .select({ postId: reactions.postId, emoji: reactions.emoji })
+        .from(reactions)
+        .where(and(eq(reactions.userId, ctx.userId), inArray(reactions.postId, input.postIds)));
+
+      return Object.fromEntries(rows.map((row) => [row.postId as string, row.emoji as Emoji]));
     }),
 
   /**

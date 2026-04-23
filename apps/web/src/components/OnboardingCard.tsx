@@ -127,7 +127,7 @@ export function OnboardingCard() {
               <article key={channel.id} className="rounded-xl border border-slate-200 bg-white p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <Link href={`/boards/${channel.slug}`} className="block">
+                    <Link href={`/boards/${channel.slug}`} prefetch={false} className="block">
                       <h3 className="truncate text-sm font-semibold text-slate-950 hover:text-blue-600">
                         {channel.name}
                       </h3>
@@ -142,7 +142,7 @@ export function OnboardingCard() {
                 </div>
 
                 <div className="mt-3 flex items-center justify-between gap-3">
-                  <Link href={`/boards/${channel.slug}`} className="text-xs font-medium text-blue-600 hover:text-blue-700">
+                  <Link href={`/boards/${channel.slug}`} prefetch={false} className="text-xs font-medium text-blue-600 hover:text-blue-700">
                     둘러보기
                   </Link>
                   <button

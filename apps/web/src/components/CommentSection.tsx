@@ -110,7 +110,7 @@ function CommentItem({ comment, postId, myVotes, isReply = false }: CommentItemP
               comment.anonNumber === 0 ? 'bg-teal-50 text-teal-700' : 'bg-slate-100 text-slate-600'
             }`}>{authorLabel}</span>
           ) : (
-            <Link href={`/users/${comment.authorId}`} className="text-xs font-medium text-slate-700 hover:text-blue-600">
+            <Link href={`/users/${comment.authorId}`} prefetch={false} className="text-xs font-medium text-slate-700 hover:text-blue-600">
               {authorLabel}
             </Link>
           )}

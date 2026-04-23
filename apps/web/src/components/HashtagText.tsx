@@ -21,6 +21,7 @@ export function HashtagText({ text, className }: HashtagTextProps) {
       <Link
         key={`${start}-${tag}`}
         href={`/tag/${encodeURIComponent(tag.toLowerCase())}`}
+        prefetch={false}
         className="font-semibold text-blue-600 hover:text-blue-700 hover:underline"
       >
         #{tag}

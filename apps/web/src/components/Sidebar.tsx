@@ -51,7 +51,7 @@ const BOARD_SECTION_ORDER: Array<{
 ];
 
 const BOARD_SECTION_KEYS: SidebarSectionKey[] = BOARD_SECTION_ORDER.map((section) => section.key);
-const BOARD_LIMIT = 6;
+const BOARD_LIMIT = 3;
 
 const UI_TEXT = {
   spacesSection: '\u{1F3AF} \uc18c\ubaa8\uc784',
@@ -171,7 +171,7 @@ export function Sidebar({ onNavigate, onlineUserCount = 0 }: SidebarProps = {}) 
     <aside className="w-56 shrink-0">
       {showRequestModal && <ChannelRequestModal onClose={() => setShowRequestModal(false)} />}
 
-      <div className="sticky top-20 space-y-2 overflow-y-auto" style={{ maxHeight: 'calc(100vh - 6rem)' }}>
+      <div className="sticky top-20 space-y-2">
         {BOARD_SECTION_ORDER.map((section) => {
           const items = boardGroups[section.key];
           if (items.length === 0) return null;

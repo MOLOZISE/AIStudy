@@ -156,7 +156,7 @@ export default function PostDetailPage({ params }: { params: Promise<{ postId: s
             {isAnon ? (
               <span className="font-medium text-slate-800">{authorLabel}</span>
             ) : (
-              <Link href={`/users/${post.authorId}`} className="font-medium text-slate-800 hover:text-blue-600">
+              <Link href={`/users/${post.authorId}`} prefetch={false} className="font-medium text-slate-800 hover:text-blue-600">
                 {authorLabel}
               </Link>
             )}

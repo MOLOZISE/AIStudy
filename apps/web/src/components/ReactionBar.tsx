@@ -7,29 +7,51 @@ import { trpc } from '@/lib/trpc';
 import { useAuthStore } from '@/store/auth';
 
 const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '😡'] as const;
-type Emoji = (typeof EMOJIS)[number];
+export type ReactionEmoji = (typeof EMOJIS)[number];
+export type ReactionCounts = Partial<Record<ReactionEmoji, number>>;
 
 interface ReactionBarProps {
   postId: string;
+  counts?: ReactionCounts;
+  myReaction?: ReactionEmoji | null;
+  usePrefetchedData?: boolean;
 }
 
-export function ReactionBar({ postId }: ReactionBarProps) {
+export function ReactionBar({
+  postId,
+  counts: prefetchedCounts,
+  myReaction: prefetchedMyReaction,
+  usePrefetchedData = false,
+}: ReactionBarProps) {
   const { user } = useAuthStore();
   const router = useRouter();
   const utils = trpc.useContext();
-  const [pulsingEmoji, setPulsingEmoji] = useState<Emoji | null>(null);
+  const [pulsingEmoji, setPulsingEmoji] = useState<ReactionEmoji | null>(null);
 
-  const { data: counts = {} as Record<Emoji, number> } = trpc.reactions.getForPost.useQuery({ postId });
-  const { data: myReaction } = trpc.reactions.getMyReaction.useQuery({ postId }, { enabled: !!user });
+  const { data: queryCounts = {} as ReactionCounts } = trpc.reactions.getForPost.useQuery(
+    { postId },
+    { enabled: !usePrefetchedData && prefetchedCounts === undefined }
+  );
+  const { data: queryMyReaction } = trpc.reactions.getMyReaction.useQuery(
+    { postId },
+    { enabled: !!user && !usePrefetchedData && prefetchedMyReaction === undefined }
+  );
+
+  const counts = usePrefetchedData ? prefetchedCounts ?? {} : prefetchedCounts ?? queryCounts;
+  const myReaction = usePrefetchedData
+    ? prefetchedMyReaction ?? null
+    : prefetchedMyReaction ?? queryMyReaction;
 
   const toggle = trpc.reactions.toggle.useMutation({
     onSuccess: () => {
       utils.reactions.getForPost.invalidate({ postId });
       utils.reactions.getMyReaction.invalidate({ postId });
+      utils.reactions.getForPosts.invalidate();
+      utils.reactions.getMyReactionsForPosts.invalidate();
     },
   });
 
-  function handleClick(emoji: Emoji) {
+  function handleClick(emoji: ReactionEmoji) {
     if (!user) {
       router.push('/login');
       return;
@@ -43,7 +65,7 @@ export function ReactionBar({ postId }: ReactionBarProps) {
   return (
     <div className="mt-4 flex flex-wrap gap-1.5">
       {EMOJIS.map((emoji) => {
-        const count = counts[emoji] ?? 0;
+        const count = counts?.[emoji] ?? 0;
         const active = myReaction === emoji;
 
         return (
@@ -52,7 +74,7 @@ export function ReactionBar({ postId }: ReactionBarProps) {
             type="button"
             onClick={() => handleClick(emoji)}
             disabled={toggle.isLoading}
-            aria-label={`${emoji} 반응 ${count > 0 ? `${count}개` : ''}`}
+            aria-label={`${emoji} 諛섏쓳 ${count > 0 ? `${count}媛?` : ''}`}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.98 }}
             animate={pulsingEmoji === emoji ? { scale: [1, 1.4, 1] } : { scale: 1 }}

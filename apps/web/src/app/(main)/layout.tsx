@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/store/auth';
 import { Sidebar } from '@/components/Sidebar';
@@ -12,11 +12,9 @@ import { usePresence } from '@/hooks/usePresence';
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const pathname = usePathname();
   const { user, isLoading } = useAuthStore();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const onlineUserIds = usePresence(user?.id);
-  const showSidebar = !pathname?.startsWith('/boards/') && !pathname?.startsWith('/spaces/');
 
   useEffect(() => {
     if (!isLoading && !user) router.replace('/login');
@@ -98,18 +96,16 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
               </button>
             </div>
             <div className="p-3">
-              {showSidebar && <Sidebar onNavigate={() => setDrawerOpen(false)} onlineUserCount={onlineUserIds.length} />}
+              <Sidebar onNavigate={() => setDrawerOpen(false)} onlineUserCount={onlineUserIds.length} />
             </div>
           </div>
         </>
       )}
 
       <div className="mx-auto flex max-w-6xl gap-6 px-4 py-6">
-        {showSidebar && (
-          <div className="hidden md:block">
-            <Sidebar onlineUserCount={onlineUserIds.length} />
-          </div>
-        )}
+        <div className="hidden md:block">
+          <Sidebar onlineUserCount={onlineUserIds.length} />
+        </div>
         <main className="min-w-0 flex-1">{children}</main>
       </div>
     </div>

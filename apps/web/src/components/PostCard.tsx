@@ -147,7 +147,7 @@ function PostCardComponent({ post, onDeleted, isSaved: isSavedProp }: PostCardPr
               ) : (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 font-semibold text-blue-700 ring-1 ring-blue-100">
                   <FaceIcon />
-                  <Link href={`/users/${post.authorId}`} className="hover:text-blue-800">
+                  <Link href={`/users/${post.authorId}`} prefetch={false} className="hover:text-blue-800">
                     {authorLabel}
                   </Link>
                 </span>

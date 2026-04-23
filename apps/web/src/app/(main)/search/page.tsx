@@ -83,6 +83,7 @@ export default function SearchPage({
                   <Link
                     key={post.id}
                     href={`/posts/${post.id}`}
+                    prefetch={false}
                     className="block rounded-lg border border-slate-200 p-4 transition-colors hover:border-slate-300 hover:bg-slate-50"
                   >
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
@@ -112,6 +113,7 @@ export default function SearchPage({
                   <Link
                     key={channel.id}
                     href={channel.type === 'space' ? `/spaces/${channel.slug}` : `/boards/${channel.slug}`}
+                    prefetch={false}
                     className="block rounded-lg border border-slate-200 p-4 transition-colors hover:border-slate-300 hover:bg-slate-50"
                   >
                     <div className="flex items-start justify-between gap-4">
@@ -149,6 +151,7 @@ export default function SearchPage({
                   <Link
                     key={user.id}
                     href={`/users/${user.id}`}
+                    prefetch={false}
                     className="block rounded-lg border border-slate-200 p-4 transition-colors hover:border-slate-300 hover:bg-slate-50"
                   >
                     <div className="flex items-center gap-3">
