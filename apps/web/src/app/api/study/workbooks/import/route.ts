@@ -129,6 +129,7 @@ export async function POST(req: Request) {
     const result = await importStudyWorkbook({
       workbookId: workbook.id,
       subjectId: subject.id,
+      subjectName,
       requestedBy: user.id,
       sourceHash: fileHash,
       buffer,
