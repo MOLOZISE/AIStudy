@@ -4,6 +4,7 @@ import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import {
   db,
   studyAttempts,
+  studyConcepts,
   studyExamSetItems,
   studyExamSets,
   studyImportJobs,
@@ -527,6 +528,205 @@ export const studyRouter = router({
         resolvedCount: correctCount,
         results,
       };
+    }),
+
+  // ── 개념 ───────────────────────────────────────────────────────────────────
+
+  listConcepts: protectedProcedure
+    .input(z.object({ workbookId: z.string().uuid() }))
+    .query(async ({ input }) => {
+      const concepts = await db
+        .select({
+          id: studyConcepts.id,
+          externalId: studyConcepts.externalId,
+          parentId: studyConcepts.parentId,
+          title: studyConcepts.title,
+          description: studyConcepts.description,
+          orderIndex: studyConcepts.orderIndex,
+          questionCount: sql<number>`(
+            select count(*) from study_questions q
+            where q.concept_id = ${studyConcepts.id}
+            and q.is_active = true and q.is_hidden = false
+          )::int`,
+        })
+        .from(studyConcepts)
+        .where(eq(studyConcepts.workbookId, input.workbookId))
+        .orderBy(asc(studyConcepts.orderIndex), asc(studyConcepts.externalId));
+
+      return { concepts };
+    }),
+
+  getConceptQuestions: protectedProcedure
+    .input(z.object({ conceptId: z.string().uuid(), limit: z.number().min(1).max(100).default(50) }))
+    .query(async ({ input }) => {
+      const questions = await db
+        .select({
+          id: studyQuestions.id,
+          externalId: studyQuestions.externalId,
+          questionNo: studyQuestions.questionNo,
+          type: studyQuestions.type,
+          prompt: studyQuestions.prompt,
+          choices: studyQuestions.choices,
+          difficulty: studyQuestions.difficulty,
+        })
+        .from(studyQuestions)
+        .where(and(
+          eq(studyQuestions.conceptId, input.conceptId),
+          eq(studyQuestions.isActive, true),
+          eq(studyQuestions.isHidden, false),
+        ))
+        .orderBy(asc(studyQuestions.questionNo))
+        .limit(input.limit);
+
+      return { questions };
+    }),
+
+  // ── 랜덤 연습 ────────────────────────────────────────────────────────────────
+
+  getRandomQuestions: protectedProcedure
+    .input(z.object({
+      workbookId: z.string().uuid().optional(),
+      conceptId: z.string().uuid().optional(),
+      difficulty: z.string().optional(),
+      limit: z.number().min(1).max(50).default(10),
+    }))
+    .query(async ({ input }) => {
+      const conditions = [
+        eq(studyQuestions.isActive, true),
+        eq(studyQuestions.isHidden, false),
+      ];
+      if (input.workbookId) conditions.push(eq(studyQuestions.workbookId, input.workbookId));
+      if (input.conceptId) conditions.push(eq(studyQuestions.conceptId, input.conceptId));
+      if (input.difficulty) conditions.push(eq(studyQuestions.difficulty, input.difficulty));
+
+      const questions = await db
+        .select({
+          id: studyQuestions.id,
+          workbookId: studyQuestions.workbookId,
+          questionNo: studyQuestions.questionNo,
+          type: studyQuestions.type,
+          prompt: studyQuestions.prompt,
+          choices: studyQuestions.choices,
+          difficulty: studyQuestions.difficulty,
+        })
+        .from(studyQuestions)
+        .where(and(...conditions))
+        .orderBy(sql`random()`)
+        .limit(input.limit);
+
+      return { questions };
+    }),
+
+  submitPractice: protectedProcedure
+    .input(z.object({
+      elapsedSeconds: z.number().int().min(0).optional(),
+      answers: z.array(z.object({ questionId: z.string().uuid(), selectedAnswer: z.string().min(1) })).min(1),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const questionIds = input.answers.map((a) => a.questionId);
+      const dbQuestions = await db
+        .select({
+          id: studyQuestions.id,
+          workbookId: studyQuestions.workbookId,
+          prompt: studyQuestions.prompt,
+          answer: studyQuestions.answer,
+          choices: studyQuestions.choices,
+          explanation: studyQuestions.explanation,
+        })
+        .from(studyQuestions)
+        .where(and(inArray(studyQuestions.id, questionIds), eq(studyQuestions.isActive, true)));
+
+      const questionMap = new Map(dbQuestions.map((q) => [q.id, q]));
+      const answerMap = new Map(input.answers.map((a) => [a.questionId, a.selectedAnswer]));
+      const results = [];
+
+      for (const [questionId, selectedAnswer] of answerMap) {
+        const question = questionMap.get(questionId);
+        if (!question) continue;
+        const correctAnswer = resolveAnswer(question.answer, question.choices as string[] | null);
+        const isCorrect = normalizeAnswer(selectedAnswer) === normalizeAnswer(correctAnswer);
+
+        const [attempt] = await db
+          .insert(studyAttempts)
+          .values({
+            userId: ctx.userId,
+            workbookId: question.workbookId,
+            questionId,
+            selectedAnswer,
+            isCorrect,
+            elapsedSeconds: input.elapsedSeconds,
+            metadata: { source: 'random_practice' },
+          })
+          .returning({ id: studyAttempts.id });
+
+        if (!isCorrect) {
+          await createWrongNote({ userId: ctx.userId, workbookId: question.workbookId, questionId, attemptId: attempt.id });
+        }
+        results.push({ questionId, prompt: question.prompt, selectedAnswer, isCorrect, correctAnswer, explanation: question.explanation });
+      }
+
+      const correctCount = results.filter((r) => r.isCorrect).length;
+      return {
+        totalQuestions: results.length,
+        correctCount,
+        wrongCount: results.length - correctCount,
+        accuracy: Math.round((correctCount / results.length) * 100),
+        results,
+      };
+    }),
+
+  // ── 검색 ────────────────────────────────────────────────────────────────────
+
+  searchQuestions: protectedProcedure
+    .input(z.object({
+      query: z.string().min(1).max(200),
+      workbookId: z.string().uuid().optional(),
+      limit: z.number().min(1).max(50).default(20),
+    }))
+    .query(async ({ input }) => {
+      const pattern = `%${input.query}%`;
+      const conditions = [
+        sql`(${studyQuestions.prompt} ilike ${pattern} or ${studyQuestions.explanation} ilike ${pattern})`,
+        eq(studyQuestions.isActive, true),
+        eq(studyQuestions.isHidden, false),
+      ];
+      if (input.workbookId) conditions.push(eq(studyQuestions.workbookId, input.workbookId));
+
+      const items = await db
+        .select({
+          id: studyQuestions.id,
+          workbookId: studyQuestions.workbookId,
+          workbookName: studyWorkbooks.originalFilename,
+          questionNo: studyQuestions.questionNo,
+          type: studyQuestions.type,
+          prompt: sql<string>`left(${studyQuestions.prompt}, 200)`,
+          difficulty: studyQuestions.difficulty,
+        })
+        .from(studyQuestions)
+        .innerJoin(studyWorkbooks, eq(studyQuestions.workbookId, studyWorkbooks.id))
+        .where(and(...conditions))
+        .orderBy(asc(studyQuestions.questionNo))
+        .limit(input.limit);
+
+      return { items, query: input.query };
+    }),
+
+  // ── 문제집 삭제 ───────────────────────────────────────────────────────────────
+
+  deleteWorkbook: protectedProcedure
+    .input(z.object({ workbookId: z.string().uuid() }))
+    .mutation(async ({ input, ctx }) => {
+      const [workbook] = await db
+        .select({ uploadedBy: studyWorkbooks.uploadedBy })
+        .from(studyWorkbooks)
+        .where(eq(studyWorkbooks.id, input.workbookId))
+        .limit(1);
+
+      if (!workbook) throw new TRPCError({ code: 'NOT_FOUND', message: '문제집을 찾을 수 없습니다.' });
+      if (workbook.uploadedBy !== ctx.userId) throw new TRPCError({ code: 'FORBIDDEN', message: '삭제 권한이 없습니다.' });
+
+      await db.delete(studyWorkbooks).where(eq(studyWorkbooks.id, input.workbookId));
+      return { deleted: true };
     }),
 
   listExamHistory: protectedProcedure

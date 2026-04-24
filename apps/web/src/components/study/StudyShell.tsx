@@ -4,8 +4,10 @@ import type { ReactNode } from 'react';
 const navItems = [
   { href: '/study', label: '홈' },
   { href: '/study/library', label: '문제집' },
+  { href: '/study/practice', label: '연습' },
   { href: '/study/exams', label: '모의고사' },
   { href: '/study/wrong-notes', label: '오답' },
+  { href: '/study/search', label: '검색' },
   { href: '/study/stats', label: '통계' },
 ];
 
