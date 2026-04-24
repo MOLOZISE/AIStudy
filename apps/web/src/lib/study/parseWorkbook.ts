@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import * as XLSX from 'xlsx';
 
 export const STUDY_SHEETS = {
@@ -184,7 +185,8 @@ function fallbackId(prefix: string, rowNumber: number): string {
 }
 
 function stableRowHash(row: Record<string, string>): string {
-  return JSON.stringify(Object.keys(row).sort().map((key) => [key, row[key]]));
+  const stable = JSON.stringify(Object.keys(row).sort().map((key) => [key, row[key]]));
+  return createHash('sha256').update(stable).digest('hex').slice(0, 64);
 }
 
 function parseConcepts(
