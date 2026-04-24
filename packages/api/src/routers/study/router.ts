@@ -18,6 +18,14 @@ function normalizeAnswer(value: string): string {
   return value.trim().replace(/\s+/g, '').toLowerCase();
 }
 
+// Excel에 정답이 "3" 같은 선택지 번호로 저장된 경우 실제 텍스트로 변환
+function resolveAnswer(answer: string, choices: string[] | null): string {
+  if (!choices || choices.length === 0) return answer;
+  const n = parseInt(answer.trim(), 10);
+  if (!isNaN(n) && n >= 1 && n <= choices.length) return choices[n - 1];
+  return answer;
+}
+
 async function createWrongNote(input: {
   userId: string;
   workbookId: string;
@@ -159,6 +167,7 @@ export const studyRouter = router({
           id: studyQuestions.id,
           workbookId: studyQuestions.workbookId,
           answer: studyQuestions.answer,
+          choices: studyQuestions.choices,
           explanation: studyQuestions.explanation,
         })
         .from(studyQuestions)
@@ -167,7 +176,8 @@ export const studyRouter = router({
 
       if (!question) throw new TRPCError({ code: 'NOT_FOUND', message: '문항을 찾을 수 없습니다.' });
 
-      const isCorrect = normalizeAnswer(input.selectedAnswer) === normalizeAnswer(question.answer);
+      const correctAnswer = resolveAnswer(question.answer, question.choices as string[] | null);
+      const isCorrect = normalizeAnswer(input.selectedAnswer) === normalizeAnswer(correctAnswer);
       const [attempt] = await db
         .insert(studyAttempts)
         .values({
@@ -187,7 +197,7 @@ export const studyRouter = router({
       return {
         attemptId: attempt.id,
         isCorrect,
-        correctAnswer: question.answer,
+        correctAnswer,
         explanation: question.explanation,
       };
     }),
@@ -273,6 +283,7 @@ export const studyRouter = router({
           workbookId: studyQuestions.workbookId,
           prompt: studyQuestions.prompt,
           answer: studyQuestions.answer,
+          choices: studyQuestions.choices,
           explanation: studyQuestions.explanation,
         })
         .from(studyExamSetItems)
@@ -287,7 +298,8 @@ export const studyRouter = router({
 
       for (const question of setQuestions) {
         const selectedAnswer = answerMap.get(question.questionId) ?? '';
-        const isCorrect = selectedAnswer ? normalizeAnswer(selectedAnswer) === normalizeAnswer(question.answer) : false;
+        const correctAnswer = resolveAnswer(question.answer, question.choices as string[] | null);
+        const isCorrect = selectedAnswer ? normalizeAnswer(selectedAnswer) === normalizeAnswer(correctAnswer) : false;
         const [attempt] = await db
           .insert(studyAttempts)
           .values({
@@ -311,7 +323,7 @@ export const studyRouter = router({
           prompt: question.prompt,
           selectedAnswer: selectedAnswer || '(미응답)',
           isCorrect,
-          correctAnswer: question.answer,
+          correctAnswer,
           explanation: question.explanation,
         });
       }
