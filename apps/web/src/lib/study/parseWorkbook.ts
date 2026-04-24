@@ -1,4 +1,4 @@
-import ExcelJS from 'exceljs';
+import * as XLSX from 'xlsx';
 
 export const STUDY_SHEETS = {
   concepts: '01_개념마스터',
@@ -62,11 +62,6 @@ export interface ParsedStudyWorkbook {
   errors: StudyImportRowError[];
 }
 
-type RowRecord = {
-  rowNumber: number;
-  values: Record<string, string>;
-};
-
 const HEADER_ALIASES: Record<string, string> = {
   conceptid: 'concept_id',
   '개념id': 'concept_id',
@@ -122,57 +117,58 @@ const HEADER_ALIASES: Record<string, string> = {
   '배점': 'points',
 };
 
-const CHOICE_KEYS = ['choice_1', 'choice_2', 'choice_3', 'choice_4', 'choice_5', 'choice_6'];
 const CHOICE_ALIASES: Record<string, string> = {
-  choice1: 'choice_1',
-  choice2: 'choice_2',
-  choice3: 'choice_3',
-  choice4: 'choice_4',
-  choice5: 'choice_5',
-  choice6: 'choice_6',
-  option1: 'choice_1',
-  option2: 'choice_2',
-  option3: 'choice_3',
-  option4: 'choice_4',
-  option5: 'choice_5',
-  option6: 'choice_6',
-  '선택지1': 'choice_1',
-  '선지1': 'choice_1',
-  '보기1': 'choice_1',
-  '선택지2': 'choice_2',
-  '선지2': 'choice_2',
-  '보기2': 'choice_2',
-  '선택지3': 'choice_3',
-  '선지3': 'choice_3',
-  '보기3': 'choice_3',
-  '선택지4': 'choice_4',
-  '선지4': 'choice_4',
-  '보기4': 'choice_4',
-  '선택지5': 'choice_5',
-  '선지5': 'choice_5',
-  '보기5': 'choice_5',
-  '선택지6': 'choice_6',
-  '선지6': 'choice_6',
-  '보기6': 'choice_6',
+  choice1: 'choice_1', choice2: 'choice_2', choice3: 'choice_3',
+  choice4: 'choice_4', choice5: 'choice_5', choice6: 'choice_6',
+  option1: 'choice_1', option2: 'choice_2', option3: 'choice_3',
+  option4: 'choice_4', option5: 'choice_5', option6: 'choice_6',
+  '선택지1': 'choice_1', '선지1': 'choice_1', '보기1': 'choice_1',
+  '선택지2': 'choice_2', '선지2': 'choice_2', '보기2': 'choice_2',
+  '선택지3': 'choice_3', '선지3': 'choice_3', '보기3': 'choice_3',
+  '선택지4': 'choice_4', '선지4': 'choice_4', '보기4': 'choice_4',
+  '선택지5': 'choice_5', '선지5': 'choice_5', '보기5': 'choice_5',
+  '선택지6': 'choice_6', '선지6': 'choice_6', '보기6': 'choice_6',
 };
+
+const CHOICE_KEYS = ['choice_1', 'choice_2', 'choice_3', 'choice_4', 'choice_5', 'choice_6'];
 
 function normalizeHeader(value: string): string {
   const compact = value.toLowerCase().replace(/[\s_\-./()[\]]/g, '');
   return CHOICE_ALIASES[compact] ?? HEADER_ALIASES[compact] ?? compact;
 }
 
-function asCellText(value: ExcelJS.CellValue): string {
+function cellText(value: unknown): string {
   if (value === null || value === undefined) return '';
   if (value instanceof Date) return value.toISOString();
-  if (typeof value === 'object') {
-    if ('text' in value && typeof value.text === 'string') return value.text.trim();
-    if ('result' in value) return asCellText(value.result as ExcelJS.CellValue);
-    if ('richText' in value && Array.isArray(value.richText)) {
-      return value.richText.map((part) => part.text).join('').trim();
-    }
-    return String(value).trim();
-  }
   return String(value).trim();
+}
+
+function getRows(workbook: XLSX.WorkBook, sheetName: string): Array<{ rowNumber: number; values: Record<string, string> }> {
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) return [];
+
+  const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+    defval: '',
+    blankrows: false,
+    raw: false,
+  });
+
+  if (raw.length === 0) return [];
+
+  // Normalize headers from first row keys
+  const headerMap: Record<string, string> = {};
+  for (const key of Object.keys(raw[0])) {
+    headerMap[key] = normalizeHeader(key);
+  }
+
+  return raw.map((row, index) => {
+    const values: Record<string, string> = {};
+    for (const [orig, normalized] of Object.entries(headerMap)) {
+      const text = cellText(row[orig]);
+      if (text) values[normalized] = text;
+    }
+    return { rowNumber: index + 2, values };
+  }).filter((r) => Object.keys(r.values).length > 0);
 }
 
 function getValue(row: Record<string, string>, keys: string[]): string | undefined {
@@ -183,43 +179,6 @@ function getValue(row: Record<string, string>, keys: string[]): string | undefin
   return undefined;
 }
 
-function getRows(workbook: ExcelJS.Workbook, sheetName: string): RowRecord[] {
-  const sheet = workbook.getWorksheet(sheetName);
-  if (!sheet) return [];
-
-  let headerRowNumber = 1;
-  let headers: string[] = [];
-
-  sheet.eachRow((row, rowNumber) => {
-    if (headers.length > 0) return;
-    const values = row.values as ExcelJS.CellValue[];
-    const current = values.slice(1).map(asCellText);
-    const meaningful = current.filter(Boolean);
-    if (meaningful.length >= 2) {
-      headerRowNumber = rowNumber;
-      headers = current.map(normalizeHeader);
-    }
-  });
-
-  if (headers.length === 0) return [];
-
-  const rows: RowRecord[] = [];
-  for (let rowNumber = headerRowNumber + 1; rowNumber <= sheet.rowCount; rowNumber += 1) {
-    const row = sheet.getRow(rowNumber);
-    const values = row.values as ExcelJS.CellValue[];
-    const record: Record<string, string> = {};
-    headers.forEach((header, index) => {
-      if (!header) return;
-      const text = asCellText(values[index + 1]);
-      if (text) record[header] = text;
-    });
-
-    if (Object.keys(record).length > 0) rows.push({ rowNumber, values: record });
-  }
-
-  return rows;
-}
-
 function fallbackId(prefix: string, rowNumber: number): string {
   return `${prefix}_${rowNumber}`;
 }
@@ -228,7 +187,10 @@ function stableRowHash(row: Record<string, string>): string {
   return JSON.stringify(Object.keys(row).sort().map((key) => [key, row[key]]));
 }
 
-function parseConcepts(rows: RowRecord[], errors: StudyImportRowError[]): ParsedStudyConcept[] {
+function parseConcepts(
+  rows: Array<{ rowNumber: number; values: Record<string, string> }>,
+  errors: StudyImportRowError[],
+): ParsedStudyConcept[] {
   return rows.flatMap((row) => {
     const externalId = getValue(row.values, ['concept_id', 'id']) ?? fallbackId('concept', row.rowNumber);
     const title = getValue(row.values, ['title', 'content']);
@@ -236,7 +198,6 @@ function parseConcepts(rows: RowRecord[], errors: StudyImportRowError[]): Parsed
       errors.push({ sheet: STUDY_SHEETS.concepts, row: row.rowNumber, message: '개념명 또는 제목이 없습니다.', raw: row.values });
       return [];
     }
-
     return [{
       externalId,
       parentExternalId: getValue(row.values, ['parent_concept_id']),
@@ -248,7 +209,10 @@ function parseConcepts(rows: RowRecord[], errors: StudyImportRowError[]): Parsed
   });
 }
 
-function parseSeeds(rows: RowRecord[], errors: StudyImportRowError[]): ParsedStudySeed[] {
+function parseSeeds(
+  rows: Array<{ rowNumber: number; values: Record<string, string> }>,
+  errors: StudyImportRowError[],
+): ParsedStudySeed[] {
   return rows.flatMap((row) => {
     const externalId = getValue(row.values, ['seed_id', 'id']) ?? fallbackId('seed', row.rowNumber);
     const title = getValue(row.values, ['title']);
@@ -257,18 +221,14 @@ function parseSeeds(rows: RowRecord[], errors: StudyImportRowError[]): ParsedStu
       errors.push({ sheet: STUDY_SHEETS.seeds, row: row.rowNumber, message: '출제포인트 내용이 없습니다.', raw: row.values });
       return [];
     }
-
-    return [{
-      externalId,
-      conceptExternalId: getValue(row.values, ['concept_id']),
-      title,
-      content,
-      raw: row.values,
-    }];
+    return [{ externalId, conceptExternalId: getValue(row.values, ['concept_id']), title, content, raw: row.values }];
   });
 }
 
-function parseQuestions(rows: RowRecord[], errors: StudyImportRowError[]): ParsedStudyQuestion[] {
+function parseQuestions(
+  rows: Array<{ rowNumber: number; values: Record<string, string> }>,
+  errors: StudyImportRowError[],
+): ParsedStudyQuestion[] {
   return rows.flatMap((row) => {
     const externalId = getValue(row.values, ['question_id', 'id']) ?? fallbackId('question', row.rowNumber);
     const prompt = getValue(row.values, ['prompt', 'content']);
@@ -277,9 +237,7 @@ function parseQuestions(rows: RowRecord[], errors: StudyImportRowError[]): Parse
       errors.push({ sheet: STUDY_SHEETS.questions, row: row.rowNumber, message: '문제 본문 또는 정답이 없습니다.', raw: row.values });
       return [];
     }
-
-    const choices = CHOICE_KEYS.map((key) => row.values[key]).filter((value): value is string => Boolean(value));
-
+    const choices = CHOICE_KEYS.map((key) => row.values[key]).filter((v): v is string => Boolean(v));
     return [{
       externalId,
       conceptExternalId: getValue(row.values, ['concept_id']),
@@ -297,9 +255,11 @@ function parseQuestions(rows: RowRecord[], errors: StudyImportRowError[]): Parse
   });
 }
 
-function parseExamSets(rows: RowRecord[], errors: StudyImportRowError[]): ParsedStudyExamSet[] {
+function parseExamSets(
+  rows: Array<{ rowNumber: number; values: Record<string, string> }>,
+  errors: StudyImportRowError[],
+): ParsedStudyExamSet[] {
   const sets = new Map<string, ParsedStudyExamSet>();
-
   for (const row of rows) {
     const externalId = getValue(row.values, ['set_id', 'id']) ?? fallbackId('set', row.rowNumber);
     const questionExternalId = getValue(row.values, ['question_id']);
@@ -307,14 +267,12 @@ function parseExamSets(rows: RowRecord[], errors: StudyImportRowError[]): Parsed
       errors.push({ sheet: STUDY_SHEETS.examSets, row: row.rowNumber, message: '세트 문항 question_id가 없습니다.', raw: row.values });
       continue;
     }
-
     const current = sets.get(externalId) ?? {
       externalId,
       title: getValue(row.values, ['set_title', 'title']) ?? externalId,
       description: getValue(row.values, ['description']),
       items: [],
     };
-
     current.items.push({
       questionExternalId,
       position: Number(getValue(row.values, ['position']) ?? current.items.length + 1) || current.items.length + 1,
@@ -323,13 +281,11 @@ function parseExamSets(rows: RowRecord[], errors: StudyImportRowError[]): Parsed
     });
     sets.set(externalId, current);
   }
-
   return [...sets.values()];
 }
 
 export async function parseStudyWorkbook(buffer: Buffer): Promise<ParsedStudyWorkbook> {
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load(buffer as unknown as Parameters<typeof workbook.xlsx.load>[0]);
+  const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true });
 
   const errors: StudyImportRowError[] = [];
   const concepts = parseConcepts(getRows(workbook, STUDY_SHEETS.concepts), errors);
@@ -346,7 +302,7 @@ export async function parseStudyWorkbook(buffer: Buffer): Promise<ParsedStudyWor
   }
 
   return {
-    sheetNames: workbook.worksheets.map((sheet) => sheet.name),
+    sheetNames: workbook.SheetNames,
     concepts,
     seeds,
     questions,
