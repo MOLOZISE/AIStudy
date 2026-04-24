@@ -18,7 +18,7 @@ interface ConceptItemProps {
   depth: number;
 }
 
-function ConceptItem({ concept, workbookId, depth }: ConceptItemProps) {
+function ConceptItem({ concept, depth }: ConceptItemProps) {
   const [open, setOpen] = useState(false);
   const { data, isLoading } = trpc.study.getConceptQuestions.useQuery(
     { conceptId: concept.id },
