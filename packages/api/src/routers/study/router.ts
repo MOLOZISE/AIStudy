@@ -86,8 +86,22 @@ export const studyRouter = router({
     .input(z.object({ workbookId: z.string().uuid() }))
     .query(async ({ input }) => {
       const [workbook] = await db
-        .select()
+        .select({
+          id: studyWorkbooks.id,
+          subjectId: studyWorkbooks.subjectId,
+          subjectName: studySubjects.name,
+          uploadedBy: studyWorkbooks.uploadedBy,
+          originalFilename: studyWorkbooks.originalFilename,
+          storageBucket: studyWorkbooks.storageBucket,
+          storagePath: studyWorkbooks.storagePath,
+          fileHash: studyWorkbooks.fileHash,
+          status: studyWorkbooks.status,
+          metadata: studyWorkbooks.metadata,
+          uploadedAt: studyWorkbooks.uploadedAt,
+          updatedAt: studyWorkbooks.updatedAt,
+        })
         .from(studyWorkbooks)
+        .leftJoin(studySubjects, eq(studyWorkbooks.subjectId, studySubjects.id))
         .where(eq(studyWorkbooks.id, input.workbookId))
         .limit(1);
 
