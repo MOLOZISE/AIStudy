@@ -24,9 +24,6 @@ function safeSlug(value: string): string {
   return slug || 'excel-study';
 }
 
-function safeFilename(value: string): string {
-  return value.replace(/[^\w.가-힣-]+/g, '-').replace(/-+/g, '-');
-}
 
 async function requireUser(req: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -81,7 +78,7 @@ export async function POST(req: Request) {
     const subjectSlug = safeSlug(String(formData.get('subjectSlug') || subjectName));
     const buffer = Buffer.from(await file.arrayBuffer());
     const fileHash = createHash('sha256').update(buffer).digest('hex');
-    const storagePath = `workbooks/${user.id}/${fileHash}-${safeFilename(file.name)}`;
+    const storagePath = `workbooks/${user.id}/${fileHash}.xlsx`;
 
     const [subject] = await db
       .insert(studySubjects)
