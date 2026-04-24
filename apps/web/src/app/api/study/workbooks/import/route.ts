@@ -8,6 +8,8 @@ import { importStudyWorkbook } from '@/lib/study/importWorkbook';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+const STORAGE_BUCKET = 'study-workbooks';
+
 function badRequest(message: string, status = 400) {
   return NextResponse.json({ ok: false, message }, { status });
 }
@@ -20,6 +22,10 @@ function safeSlug(value: string): string {
     .replace(/[^a-z0-9가-힣]+/g, '-')
     .replace(/^-+|-+$/g, '');
   return slug || 'excel-study';
+}
+
+function safeFilename(value: string): string {
+  return value.replace(/[^\w.가-힣-]+/g, '-').replace(/-+/g, '-');
 }
 
 async function requireUser(req: Request) {
@@ -43,6 +49,19 @@ async function requireUser(req: Request) {
   return user;
 }
 
+function storageClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !key) {
+    throw new Error('SUPABASE_SERVICE_ROLE_KEY 환경 변수가 설정되어 있지 않습니다.');
+  }
+
+  return createClient(supabaseUrl, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
 export async function POST(req: Request) {
   try {
     const user = await requireUser(req);
@@ -62,6 +81,7 @@ export async function POST(req: Request) {
     const subjectSlug = safeSlug(String(formData.get('subjectSlug') || subjectName));
     const buffer = Buffer.from(await file.arrayBuffer());
     const fileHash = createHash('sha256').update(buffer).digest('hex');
+    const storagePath = `workbooks/${user.id}/${fileHash}-${safeFilename(file.name)}`;
 
     const [subject] = await db
       .insert(studySubjects)
@@ -72,23 +92,36 @@ export async function POST(req: Request) {
       })
       .returning({ id: studySubjects.id });
 
+    const supabase = storageClient();
+    const upload = await supabase.storage.from(STORAGE_BUCKET).upload(storagePath, buffer, {
+      contentType: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      upsert: true,
+    });
+
+    if (upload.error) {
+      return badRequest(`Storage 업로드 실패: ${upload.error.message}`, 500);
+    }
+
     const [workbook] = await db
       .insert(studyWorkbooks)
       .values({
         subjectId: subject.id,
         uploadedBy: user.id,
         originalFilename: file.name,
+        storageBucket: STORAGE_BUCKET,
+        storagePath,
         fileHash,
         status: 'importing',
         metadata: { size: file.size, contentType: file.type },
         updatedAt: new Date(),
       })
       .onConflictDoUpdate({
-        target: studyWorkbooks.fileHash,
+        target: studyWorkbooks.storagePath,
         set: {
           subjectId: sql`excluded.subject_id`,
           uploadedBy: sql`excluded.uploaded_by`,
           originalFilename: sql`excluded.original_filename`,
+          fileHash: sql`excluded.file_hash`,
           status: 'importing',
           metadata: sql`excluded.metadata`,
           updatedAt: new Date(),
