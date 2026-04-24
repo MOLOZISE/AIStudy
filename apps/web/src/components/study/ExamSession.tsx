@@ -135,12 +135,33 @@ export function ExamSession({ setId }: { setId: string }) {
 
   return (
     <div className="space-y-4">
+      {/* 번호 그리드 네비게이션 */}
+      <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+        <p className="mb-2 text-xs text-slate-500">문항 이동</p>
+        <div className="flex flex-wrap gap-1.5">
+          {questions.map((q, i) => (
+            <button
+              key={q.questionId}
+              type="button"
+              onClick={() => setCurrentIndex(i)}
+              className={`h-8 w-8 rounded text-xs font-semibold transition-colors ${
+                i === currentIndex
+                  ? 'bg-blue-600 text-white'
+                  : answers[q.questionId]
+                  ? 'bg-emerald-100 text-emerald-700'
+                  : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              {i + 1}
+            </button>
+          ))}
+        </div>
+      </section>
+
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex items-center justify-between gap-3 text-xs text-slate-500">
           <span>{examSet.title}</span>
-          <span>
-            {currentIndex + 1}/{questions.length}
-          </span>
+          <span>{currentIndex + 1}/{questions.length}</span>
         </div>
         <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
           <div className="h-full bg-blue-600" style={{ width: `${((currentIndex + 1) / questions.length) * 100}%` }} />

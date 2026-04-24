@@ -1,10 +1,12 @@
 import { StudyShell } from '@/components/study/StudyShell';
 import { StudyStatsCards } from '@/components/study/StudyStatsCards';
+import { StudyStatsDetailed } from '@/components/study/StudyStatsDetailed';
 
 export default function StudyStatsPage() {
   return (
-    <StudyShell title="학습 통계" description="attempt와 wrong_notes를 기반으로 집계 카드를 표시할 화면입니다.">
+    <StudyShell title="학습 통계" description="나의 풀이 현황과 문제집별 정답률을 확인하세요.">
       <StudyStatsCards />
+      <StudyStatsDetailed />
     </StudyShell>
   );
 }

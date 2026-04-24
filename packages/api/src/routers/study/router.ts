@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import {
   db,
   studyAttempts,
@@ -385,4 +385,173 @@ export const studyRouter = router({
       openWrongNotes: wrongStats?.openWrongNotes ?? 0,
     };
   }),
+
+  getStatsDetailed: protectedProcedure.query(async ({ ctx }) => {
+    const workbookStats = await db
+      .select({
+        workbookId: studyAttempts.workbookId,
+        workbookName: studyWorkbooks.originalFilename,
+        total: sql<number>`count(*)::int`,
+        correct: sql<number>`coalesce(sum(case when ${studyAttempts.isCorrect} then 1 else 0 end), 0)::int`,
+      })
+      .from(studyAttempts)
+      .innerJoin(studyWorkbooks, eq(studyAttempts.workbookId, studyWorkbooks.id))
+      .where(eq(studyAttempts.userId, ctx.userId))
+      .groupBy(studyAttempts.workbookId, studyWorkbooks.originalFilename)
+      .orderBy(desc(sql`count(*)`));
+
+    const dailyStats = await db
+      .select({
+        date: sql<string>`date(${studyAttempts.submittedAt} at time zone 'Asia/Seoul')::text`,
+        total: sql<number>`count(*)::int`,
+        correct: sql<number>`coalesce(sum(case when ${studyAttempts.isCorrect} then 1 else 0 end), 0)::int`,
+      })
+      .from(studyAttempts)
+      .where(and(
+        eq(studyAttempts.userId, ctx.userId),
+        sql`${studyAttempts.submittedAt} >= now() - interval '7 days'`,
+      ))
+      .groupBy(sql`date(${studyAttempts.submittedAt} at time zone 'Asia/Seoul')`)
+      .orderBy(sql`date(${studyAttempts.submittedAt} at time zone 'Asia/Seoul')`);
+
+    return {
+      workbookStats: workbookStats.map((w) => ({
+        ...w,
+        accuracy: w.total > 0 ? Math.round((w.correct / w.total) * 100) : 0,
+      })),
+      dailyStats: dailyStats.map((d) => ({
+        ...d,
+        accuracy: d.total > 0 ? Math.round((d.correct / d.total) * 100) : 0,
+      })),
+    };
+  }),
+
+  listWrongNoteQuestions: protectedProcedure
+    .input(z.object({ limit: z.number().min(1).max(100).default(50) }).default({}))
+    .query(async ({ input, ctx }) => {
+      const items = await db
+        .select({
+          noteId: studyWrongNotes.id,
+          questionId: studyQuestions.id,
+          wrongCount: studyWrongNotes.wrongCount,
+          workbookId: studyQuestions.workbookId,
+          prompt: studyQuestions.prompt,
+          choices: studyQuestions.choices,
+          type: studyQuestions.type,
+          difficulty: studyQuestions.difficulty,
+          questionNo: studyQuestions.questionNo,
+        })
+        .from(studyWrongNotes)
+        .innerJoin(studyQuestions, eq(studyWrongNotes.questionId, studyQuestions.id))
+        .where(and(
+          eq(studyWrongNotes.userId, ctx.userId),
+          eq(studyWrongNotes.status, 'open'),
+          eq(studyQuestions.isActive, true),
+          eq(studyQuestions.isHidden, false),
+        ))
+        .orderBy(desc(studyWrongNotes.wrongCount), desc(studyWrongNotes.lastWrongAt))
+        .limit(input.limit);
+
+      return { items };
+    }),
+
+  submitWrongNoteExam: protectedProcedure
+    .input(z.object({
+      elapsedSeconds: z.number().int().min(0).optional(),
+      answers: z.array(z.object({ questionId: z.string().uuid(), selectedAnswer: z.string().min(1) })).min(1),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const questionIds = input.answers.map((a) => a.questionId);
+      const dbQuestions = await db
+        .select({
+          id: studyQuestions.id,
+          workbookId: studyQuestions.workbookId,
+          prompt: studyQuestions.prompt,
+          answer: studyQuestions.answer,
+          choices: studyQuestions.choices,
+          explanation: studyQuestions.explanation,
+        })
+        .from(studyQuestions)
+        .where(and(inArray(studyQuestions.id, questionIds), eq(studyQuestions.isActive, true)));
+
+      const questionMap = new Map(dbQuestions.map((q) => [q.id, q]));
+      const answerMap = new Map(input.answers.map((a) => [a.questionId, a.selectedAnswer]));
+      const results = [];
+
+      for (const [questionId, selectedAnswer] of answerMap) {
+        const question = questionMap.get(questionId);
+        if (!question) continue;
+
+        const correctAnswer = resolveAnswer(question.answer, question.choices as string[] | null);
+        const isCorrect = normalizeAnswer(selectedAnswer) === normalizeAnswer(correctAnswer);
+
+        const [attempt] = await db
+          .insert(studyAttempts)
+          .values({
+            userId: ctx.userId,
+            workbookId: question.workbookId,
+            questionId,
+            selectedAnswer,
+            isCorrect,
+            elapsedSeconds: input.elapsedSeconds,
+            metadata: { source: 'wrong_note_session' },
+          })
+          .returning({ id: studyAttempts.id });
+
+        if (isCorrect) {
+          // 맞췄으면 오답노트 resolved 처리
+          await db
+            .update(studyWrongNotes)
+            .set({ status: 'resolved', resolvedAt: new Date(), updatedAt: new Date() })
+            .where(and(eq(studyWrongNotes.userId, ctx.userId), eq(studyWrongNotes.questionId, questionId)));
+        } else {
+          await createWrongNote({ userId: ctx.userId, workbookId: question.workbookId, questionId, attemptId: attempt.id });
+        }
+
+        results.push({
+          questionId,
+          prompt: question.prompt,
+          selectedAnswer,
+          isCorrect,
+          correctAnswer,
+          explanation: question.explanation,
+        });
+      }
+
+      const correctCount = results.filter((r) => r.isCorrect).length;
+      return {
+        totalQuestions: results.length,
+        correctCount,
+        wrongCount: results.length - correctCount,
+        accuracy: Math.round((correctCount / results.length) * 100),
+        resolvedCount: correctCount,
+        results,
+      };
+    }),
+
+  listExamHistory: protectedProcedure
+    .input(z.object({ setId: z.string().uuid(), limit: z.number().min(1).max(20).default(10) }))
+    .query(async ({ input, ctx }) => {
+      const rows = await db
+        .select({
+          date: sql<string>`date(${studyAttempts.submittedAt} at time zone 'Asia/Seoul')::text`,
+          total: sql<number>`count(*)::int`,
+          correct: sql<number>`coalesce(sum(case when ${studyAttempts.isCorrect} then 1 else 0 end), 0)::int`,
+        })
+        .from(studyAttempts)
+        .where(and(
+          eq(studyAttempts.userId, ctx.userId),
+          sql`${studyAttempts.metadata}->>'examSetId' = ${input.setId}`,
+        ))
+        .groupBy(sql`date(${studyAttempts.submittedAt} at time zone 'Asia/Seoul')`)
+        .orderBy(desc(sql`date(${studyAttempts.submittedAt} at time zone 'Asia/Seoul')`))
+        .limit(input.limit);
+
+      return {
+        history: rows.map((r) => ({
+          ...r,
+          accuracy: r.total > 0 ? Math.round((r.correct / r.total) * 100) : 0,
+        })),
+      };
+    }),
 });
