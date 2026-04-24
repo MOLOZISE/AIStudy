@@ -49,7 +49,13 @@ function Session({ config, onReset }: { config: PracticeConfig; onReset: () => v
   const startedAt = useMemo(() => Date.now(), []);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [result, setResult] = useState<Parameters<typeof ResultView>[0]['result'] | null>(null);
+  const [result, setResult] = useState<{
+    totalQuestions: number;
+    correctCount: number;
+    wrongCount: number;
+    accuracy: number;
+    results: Array<{ questionId: string; prompt: string; selectedAnswer: string; isCorrect: boolean; correctAnswer: string; explanation: string | null }>;
+  } | null>(null);
 
   const { data, isLoading, error } = trpc.study.getRandomQuestions.useQuery({
     workbookId: config.workbookId,
