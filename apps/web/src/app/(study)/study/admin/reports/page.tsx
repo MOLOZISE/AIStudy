@@ -3,9 +3,11 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { StudyShell } from '@/components/study/StudyShell';
+import { AdminGuard } from '@/components/study/admin/AdminGuard';
+import { AdminNav } from '@/components/study/admin/AdminNav';
 import { trpc } from '@/lib/trpc';
 
-export default function AdminReportsPage() {
+function AdminReportsPageContent() {
   const [status, setStatus] = useState<string | undefined>();
   const [targetType, setTargetType] = useState<string | undefined>();
 
@@ -25,7 +27,8 @@ export default function AdminReportsPage() {
 
   return (
     <StudyShell title="신고 관리" description="사용자가 신고한 콘텐츠를 관리합니다.">
-      <div className="space-y-4">
+      <AdminNav />
+      <div className="space-y-4 p-6">
         {/* Filters */}
         <div className="flex gap-2 flex-wrap">
           <select
@@ -160,5 +163,13 @@ export default function AdminReportsPage() {
         </div>
       </div>
     </StudyShell>
+  );
+}
+
+export default function AdminReportsPage() {
+  return (
+    <AdminGuard>
+      <AdminReportsPageContent />
+    </AdminGuard>
   );
 }

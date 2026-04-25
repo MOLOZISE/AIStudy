@@ -3,9 +3,11 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { StudyShell } from '@/components/study/StudyShell';
+import { AdminGuard } from '@/components/study/admin/AdminGuard';
+import { AdminNav } from '@/components/study/admin/AdminNav';
 import { trpc } from '@/lib/trpc';
 
-export default function AdminQuestionsPage() {
+function AdminQuestionsPageContent() {
   const [reviewStatus, setReviewStatus] = useState<string | undefined>();
 
   const questions = trpc.admin.listQuestionsForQc.useQuery({
@@ -17,7 +19,8 @@ export default function AdminQuestionsPage() {
 
   return (
     <StudyShell title="문제 QC 관리" description="문제 검수 상태를 관리합니다.">
-      <div className="space-y-4">
+      <AdminNav />
+      <div className="space-y-4 p-6">
         <div className="flex gap-2 flex-wrap">
           <select
             value={reviewStatus ?? ''}
@@ -98,5 +101,13 @@ export default function AdminQuestionsPage() {
         </div>
       </div>
     </StudyShell>
+  );
+}
+
+export default function AdminQuestionsPage() {
+  return (
+    <AdminGuard>
+      <AdminQuestionsPageContent />
+    </AdminGuard>
   );
 }

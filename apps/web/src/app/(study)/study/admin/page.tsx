@@ -1,15 +1,19 @@
 import Link from 'next/link';
 import { StudyShell } from '@/components/study/StudyShell';
 import { AdminOverview } from '@/components/study/AdminOverview';
+import { AdminGuard } from '@/components/study/admin/AdminGuard';
+import { AdminNav } from '@/components/study/admin/AdminNav';
 
 export default function AdminPage() {
   return (
-    <StudyShell
-      title="관리자 대시보드"
-      description="AIStudy 운영 현황을 관리합니다."
-    >
-      <div className="space-y-6">
-        <AdminOverview />
+    <AdminGuard>
+      <StudyShell
+        title="관리자 대시보드"
+        description="AIStudy 운영 현황을 관리합니다."
+      >
+        <AdminNav />
+        <div className="space-y-6 p-6">
+          <AdminOverview />
 
         {/* Admin Links */}
         <section className="grid grid-cols-2 gap-3 md:grid-cols-3">
@@ -61,7 +65,8 @@ export default function AdminPage() {
             <p className="text-xs text-slate-500 mt-1">메인 화면</p>
           </Link>
         </section>
-      </div>
-    </StudyShell>
+        </div>
+      </StudyShell>
+    </AdminGuard>
   );
 }

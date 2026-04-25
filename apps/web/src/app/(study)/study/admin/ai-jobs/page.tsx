@@ -3,9 +3,11 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { StudyShell } from '@/components/study/StudyShell';
+import { AdminGuard } from '@/components/study/admin/AdminGuard';
+import { AdminNav } from '@/components/study/admin/AdminNav';
 import { trpc } from '@/lib/trpc';
 
-export default function AdminAiJobsPage() {
+function AdminAiJobsPageContent() {
   const [status, setStatus] = useState<string | undefined>();
 
   const jobs = trpc.admin.listAiJobsForAdmin.useQuery({
@@ -17,7 +19,8 @@ export default function AdminAiJobsPage() {
 
   return (
     <StudyShell title="AI 작업 모니터링" description="AI 생성 작업의 상태를 모니터링합니다.">
-      <div className="space-y-4">
+      <AdminNav />
+      <div className="space-y-4 p-6">
         <div className="flex gap-2 flex-wrap">
           <select
             value={status ?? ''}
@@ -117,5 +120,13 @@ export default function AdminAiJobsPage() {
         </div>
       </div>
     </StudyShell>
+  );
+}
+
+export default function AdminAiJobsPage() {
+  return (
+    <AdminGuard>
+      <AdminAiJobsPageContent />
+    </AdminGuard>
   );
 }

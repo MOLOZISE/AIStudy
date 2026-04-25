@@ -9,6 +9,26 @@ interface QuestionEditorProps {
   onSaveSuccess: () => void;
 }
 
+// Helper to check if question type requires choices
+function isMultipleChoiceType(type: string): boolean {
+  return type === 'multiple_choice' || type === 'multiple_choice_single';
+}
+
+// Helper to get answer placeholder by type
+function getAnswerPlaceholder(type: string): string {
+  if (type === 'true_false') {
+    return '예: true, false, O, X, 맞음, 틀림';
+  }
+  if (type === 'short_answer') {
+    return '예: 정답 텍스트';
+  }
+  if (type === 'essay_self_review') {
+    return '예: 모범답안 또는 채점 기준';
+  }
+  // multiple_choice, multiple_choice_single
+  return '예: 1, 2, 3 또는 정답 텍스트';
+}
+
 export function QuestionEditor({ questionId, onClose, onSaveSuccess }: QuestionEditorProps) {
   const question = trpc.study.getQuestion.useQuery({ questionId });
   const updateQuestion = trpc.study.updateQuestion.useMutation();
@@ -53,7 +73,7 @@ export function QuestionEditor({ questionId, onClose, onSaveSuccess }: QuestionE
       return;
     }
 
-    if (type === 'multiple_choice') {
+    if (isMultipleChoiceType(type)) {
       const filledChoices = choices.filter((c) => c.trim());
       if (filledChoices.length < 2) {
         setErrorMessage('선택지를 최소 2개 이상 입력하세요.');
@@ -184,7 +204,7 @@ export function QuestionEditor({ questionId, onClose, onSaveSuccess }: QuestionE
       </div>
 
       {/* Choices */}
-      {type === 'multiple_choice' && (
+      {isMultipleChoiceType(type) && (
         <div>
           <label className="text-xs font-semibold text-slate-700">선택지</label>
           <div className="mt-2 space-y-2">
@@ -213,7 +233,7 @@ export function QuestionEditor({ questionId, onClose, onSaveSuccess }: QuestionE
           type="text"
           value={answer}
           onChange={(e) => setAnswer(e.target.value)}
-          placeholder="예: 1, 2, 3 또는 정답 텍스트"
+          placeholder={getAnswerPlaceholder(type)}
           className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
         />
       </div>

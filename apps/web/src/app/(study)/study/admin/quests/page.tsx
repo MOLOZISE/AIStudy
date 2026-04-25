@@ -2,9 +2,11 @@
 
 import Link from 'next/link';
 import { StudyShell } from '@/components/study/StudyShell';
+import { AdminGuard } from '@/components/study/admin/AdminGuard';
+import { AdminNav } from '@/components/study/admin/AdminNav';
 import { trpc } from '@/lib/trpc';
 
-export default function AdminQuestsPage() {
+function AdminQuestsPageContent() {
   const quests = trpc.admin.listQuestsForAdmin.useQuery();
   const updateActive = trpc.admin.updateQuestActive.useMutation({
     onSuccess: () => quests.refetch(),
@@ -14,7 +16,8 @@ export default function AdminQuestsPage() {
 
   return (
     <StudyShell title="퀘스트 관리" description="일일/주간/월간 퀘스트를 관리합니다.">
-      <div className="space-y-4">
+      <AdminNav />
+      <div className="space-y-4 p-6">
         <Link
           href="/study/admin"
           className="inline-block rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
@@ -98,5 +101,13 @@ export default function AdminQuestsPage() {
         </div>
       </div>
     </StudyShell>
+  );
+}
+
+export default function AdminQuestsPage() {
+  return (
+    <AdminGuard>
+      <AdminQuestsPageContent />
+    </AdminGuard>
   );
 }
