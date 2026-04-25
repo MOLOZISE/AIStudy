@@ -512,4 +512,140 @@ export const studyUserQuestProgressRelations = relations(studyUserQuestProgress,
   }),
 }));
 
+// ──────────────────────────────────────────────────────────────────────
+// P9: Public Workbook Repository
+// ──────────────────────────────────────────────────────────────────────
+
+export const studyWorkbookPublications = pgTable(
+  'study_workbook_publications',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workbookId: uuid('workbook_id')
+      .notNull()
+      .references(() => studyWorkbooks.id, { onDelete: 'cascade' }),
+    ownerId: uuid('owner_id').notNull(),
+    title: varchar('title', { length: 200 }).notNull(),
+    description: text('description'),
+    category: varchar('category', { length: 100 }),
+    difficulty: varchar('difficulty', { length: 40 }),
+    tags: jsonb('tags').$type<string[]>().default([]),
+    visibility: varchar('visibility', { length: 20 }).notNull().default('private'),
+    status: varchar('status', { length: 20 }).notNull().default('draft'),
+    version: integer('version').notNull().default(1),
+    licenseType: varchar('license_type', { length: 50 }).default('all-rights-reserved'),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => ({
+    workbookUniq: uniqueIndex('idx_swp_workbook_id').on(table.workbookId),
+    ownerIdx: index('idx_swp_owner_id').on(table.ownerId),
+    statusIdx: index('idx_swp_status').on(table.status),
+  })
+);
+
+export const studyUserLibrary = pgTable(
+  'study_user_library',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull(),
+    workbookId: uuid('workbook_id')
+      .notNull()
+      .references(() => studyWorkbooks.id, { onDelete: 'cascade' }),
+    sourcePublicationId: uuid('source_publication_id')
+      .notNull()
+      .references(() => studyWorkbookPublications.id, { onDelete: 'cascade' }),
+    addedAt: timestamp('added_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => ({
+    userPubUniq: uniqueIndex('idx_sul_user_pub').on(table.userId, table.sourcePublicationId),
+    userIdx: index('idx_sul_user_id').on(table.userId),
+  })
+);
+
+export const studyWorkbookReviews = pgTable(
+  'study_workbook_reviews',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workbookId: uuid('workbook_id')
+      .notNull()
+      .references(() => studyWorkbooks.id, { onDelete: 'cascade' }),
+    publicationId: uuid('publication_id')
+      .notNull()
+      .references(() => studyWorkbookPublications.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull(),
+    rating: integer('rating').notNull(),
+    comment: text('comment'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => ({
+    userPubUniq: uniqueIndex('idx_swr_user_pub').on(table.userId, table.publicationId),
+    pubIdx: index('idx_swr_publication_id').on(table.publicationId),
+  })
+);
+
+export const studyWorkbookLikes = pgTable(
+  'study_workbook_likes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    publicationId: uuid('publication_id')
+      .notNull()
+      .references(() => studyWorkbookPublications.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => ({
+    userPubUniq: uniqueIndex('idx_swl_user_pub').on(table.userId, table.publicationId),
+    pubIdx: index('idx_swl_publication_id').on(table.publicationId),
+  })
+);
+
+export const studyReports = pgTable(
+  'study_reports',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    targetType: varchar('target_type', { length: 40 }).notNull(),
+    targetId: uuid('target_id').notNull(),
+    reporterId: uuid('reporter_id').notNull(),
+    reason: varchar('reason', { length: 100 }).notNull(),
+    detail: text('detail'),
+    status: varchar('status', { length: 40 }).notNull().default('open'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => ({
+    targetIdx: index('idx_sreports_target').on(table.targetType, table.targetId),
+    reporterTargetUniq: uniqueIndex('idx_sreports_reporter_target').on(table.reporterId, table.targetId),
+  })
+);
+
+// Relations for P9
+export const studyWorkbookPublicationsRelations = relations(studyWorkbookPublications, ({ many }) => ({
+  likes: many(studyWorkbookLikes),
+  reviews: many(studyWorkbookReviews),
+  libraryEntries: many(studyUserLibrary),
+}));
+
+export const studyUserLibraryRelations = relations(studyUserLibrary, ({ one }) => ({
+  publication: one(studyWorkbookPublications, {
+    fields: [studyUserLibrary.sourcePublicationId],
+    references: [studyWorkbookPublications.id],
+  }),
+}));
+
+export const studyWorkbookReviewsRelations = relations(studyWorkbookReviews, ({ one }) => ({
+  publication: one(studyWorkbookPublications, {
+    fields: [studyWorkbookReviews.publicationId],
+    references: [studyWorkbookPublications.id],
+  }),
+}));
+
+export const studyWorkbookLikesRelations = relations(studyWorkbookLikes, ({ one }) => ({
+  publication: one(studyWorkbookPublications, {
+    fields: [studyWorkbookLikes.publicationId],
+    references: [studyWorkbookPublications.id],
+  }),
+}));
+
 export const studyQuestionVisibilityCheck = sql`study_questions.is_active = true AND study_questions.is_hidden = false`;

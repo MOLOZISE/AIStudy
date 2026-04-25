@@ -229,3 +229,39 @@ export interface StudyUserQuestProgress {
   createdAt: Date;
   updatedAt: Date;
 }
+
+export type WorkbookVisibility = 'private' | 'unlisted' | 'public';
+export type WorkbookPublicationStatus = 'draft' | 'published' | 'hidden' | 'reported' | 'archived';
+
+export interface StudyWorkbookPublication {
+  id: string;
+  workbookId: string;
+  ownerId: string;
+  title: string;
+  description?: string;
+  category?: string;
+  difficulty?: string;
+  tags: string[];
+  visibility: WorkbookVisibility;
+  status: WorkbookPublicationStatus;
+  version: number;
+  licenseType?: string;
+  publishedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PublicWorkbookListItem {
+  id: string;
+  workbookId: string;
+  title: string;
+  description?: string;
+  category?: string;
+  difficulty?: string;
+  tags: string[];
+  questionCount: number;
+  avgRating: number | null;
+  reviewCount: number;
+  likeCount: number;
+  publishedAt: Date | null;
+}

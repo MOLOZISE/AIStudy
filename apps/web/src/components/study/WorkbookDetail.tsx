@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ExamSetList } from '@/components/study/ExamSetList';
+import { WorkbookPublishSection } from '@/components/study/WorkbookPublishSection';
 import { trpc } from '@/lib/trpc';
 
 export function WorkbookDetail({ workbookId }: { workbookId: string }) {
@@ -117,6 +118,9 @@ export function WorkbookDetail({ workbookId }: { workbookId: string }) {
           <p className="mt-3 text-sm text-slate-500">아직 import 기록이 없습니다.</p>
         )}
       </section>
+
+      {/* 공개 설정 */}
+      <WorkbookPublishSection workbookId={workbookId} />
 
       {/* 삭제 */}
       <section className="rounded-lg border border-red-100 bg-white p-4">

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, avg, count, desc, eq, inArray, sql } from 'drizzle-orm';
 import {
   db,
   studyAttempts,
@@ -12,6 +12,11 @@ import {
   studySubjects,
   studyWorkbooks,
   studyWrongNotes,
+  studyWorkbookPublications,
+  studyUserLibrary,
+  studyWorkbookReviews,
+  studyWorkbookLikes,
+  studyReports,
 } from '@repo/db';
 import { protectedProcedure, router } from '../../trpc.js';
 import { awardStudyReward, updateStudyStreak, getMyProgress, listRecentRewardEvents } from '../../gamification.js';
@@ -104,7 +109,7 @@ async function createWrongNote(input: {
 export const studyRouter = router({
   listWorkbooks: protectedProcedure
     .input(z.object({ limit: z.number().min(1).max(50).default(20) }).default({ limit: 20 }))
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       const items = await db
         .select({
           id: studyWorkbooks.id,
@@ -120,6 +125,7 @@ export const studyRouter = router({
         })
         .from(studyWorkbooks)
         .leftJoin(studySubjects, eq(studyWorkbooks.subjectId, studySubjects.id))
+        .where(eq(studyWorkbooks.uploadedBy, ctx.userId))
         .orderBy(desc(studyWorkbooks.uploadedAt))
         .limit(input.limit);
 
@@ -1262,5 +1268,589 @@ export const studyRouter = router({
         });
       }
       return { success: true };
+    }),
+
+  // ── P9: Public Workbook Repository ────────────────────────────────
+
+  publishWorkbook: protectedProcedure
+    .input(
+      z.object({
+        workbookId: z.string().uuid(),
+        title: z.string().min(1).max(200),
+        description: z.string().optional(),
+        category: z.string().optional(),
+        difficulty: z.string().optional(),
+        tags: z.array(z.string()).default([]),
+        licenseType: z.string().default('all-rights-reserved'),
+        agreed: z.boolean(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      if (!input.agreed) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: '저작권 확인에 동의해야 합니다.',
+        });
+      }
+
+      const [workbook] = await db
+        .select({ uploadedBy: studyWorkbooks.uploadedBy })
+        .from(studyWorkbooks)
+        .where(eq(studyWorkbooks.id, input.workbookId))
+        .limit(1);
+
+      if (!workbook) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: '문제집을 찾을 수 없습니다.' });
+      }
+
+      if (workbook.uploadedBy !== ctx.userId) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: '본인의 문제집만 공개할 수 있습니다.' });
+      }
+
+      const now = new Date();
+      const [publication] = await db
+        .insert(studyWorkbookPublications)
+        .values({
+          workbookId: input.workbookId,
+          ownerId: ctx.userId,
+          title: input.title,
+          description: input.description,
+          category: input.category,
+          difficulty: input.difficulty,
+          tags: input.tags,
+          visibility: 'public',
+          status: 'published',
+          licenseType: input.licenseType,
+          publishedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: studyWorkbookPublications.workbookId,
+          set: {
+            title: input.title,
+            description: input.description,
+            category: input.category,
+            difficulty: input.difficulty,
+            tags: input.tags,
+            visibility: 'public',
+            status: 'published',
+            publishedAt: now,
+            updatedAt: now,
+          },
+        })
+        .returning();
+
+      await awardStudyReward({
+        userId: ctx.userId,
+        eventType: 'workbook_published',
+        sourceType: 'workbook_publication',
+        sourceId: publication.id,
+        reason: `문제집 공개: ${input.title}`,
+        idempotencyKey: `publish:${ctx.userId}:${input.workbookId}`,
+      });
+
+      return publication;
+    }),
+
+  unpublishWorkbook: protectedProcedure
+    .input(z.object({ workbookId: z.string().uuid() }))
+    .mutation(async ({ input, ctx }) => {
+      const [pub] = await db
+        .select()
+        .from(studyWorkbookPublications)
+        .where(
+          and(
+            eq(studyWorkbookPublications.workbookId, input.workbookId),
+            eq(studyWorkbookPublications.ownerId, ctx.userId)
+          )
+        )
+        .limit(1);
+
+      if (!pub) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: '공개 중인 문제집을 찾을 수 없습니다.' });
+      }
+
+      await db
+        .update(studyWorkbookPublications)
+        .set({ status: 'hidden', updatedAt: new Date() })
+        .where(eq(studyWorkbookPublications.id, pub.id));
+
+      return { status: 'hidden' };
+    }),
+
+  getMyWorkbookPublication: protectedProcedure
+    .input(z.object({ workbookId: z.string().uuid() }))
+    .query(async ({ input, ctx }) => {
+      const [pub] = await db
+        .select()
+        .from(studyWorkbookPublications)
+        .where(
+          and(
+            eq(studyWorkbookPublications.workbookId, input.workbookId),
+            eq(studyWorkbookPublications.ownerId, ctx.userId)
+          )
+        )
+        .limit(1);
+
+      return pub ?? null;
+    }),
+
+  updateWorkbookPublication: protectedProcedure
+    .input(
+      z.object({
+        workbookId: z.string().uuid(),
+        title: z.string().min(1).max(200).optional(),
+        description: z.string().optional(),
+        category: z.string().optional(),
+        difficulty: z.string().optional(),
+        tags: z.array(z.string()).optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const [pub] = await db
+        .select()
+        .from(studyWorkbookPublications)
+        .where(
+          and(
+            eq(studyWorkbookPublications.workbookId, input.workbookId),
+            eq(studyWorkbookPublications.ownerId, ctx.userId),
+            eq(studyWorkbookPublications.status, 'published')
+          )
+        )
+        .limit(1);
+
+      if (!pub) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: '공개 중인 문제집을 찾을 수 없습니다.' });
+      }
+
+      const updateData: Record<string, unknown> = { updatedAt: new Date() };
+      if (input.title) updateData.title = input.title;
+      if (input.description !== undefined) updateData.description = input.description;
+      if (input.category !== undefined) updateData.category = input.category;
+      if (input.difficulty !== undefined) updateData.difficulty = input.difficulty;
+      if (input.tags !== undefined) updateData.tags = input.tags;
+
+      await db
+        .update(studyWorkbookPublications)
+        .set(updateData)
+        .where(eq(studyWorkbookPublications.id, pub.id));
+
+      return { ...pub, ...updateData };
+    }),
+
+  listPublicWorkbooks: protectedProcedure
+    .input(
+      z.object({
+        keyword: z.string().optional(),
+        category: z.string().optional(),
+        difficulty: z.string().optional(),
+        sort: z.enum(['latest', 'rating', 'popularity']).default('latest'),
+        limit: z.number().min(1).max(100).default(20),
+        offset: z.number().min(0).default(0),
+      })
+    )
+    .query(async ({ input }) => {
+      const conditions = [
+        eq(studyWorkbookPublications.visibility, 'public'),
+        eq(studyWorkbookPublications.status, 'published'),
+      ];
+
+      if (input.keyword) {
+        conditions.push(sql`${studyWorkbookPublications.title} ILIKE '%' || ${input.keyword} || '%' OR ${studyWorkbookPublications.description} ILIKE '%' || ${input.keyword} || '%'`);
+      }
+      if (input.category) {
+        conditions.push(eq(studyWorkbookPublications.category, input.category));
+      }
+      if (input.difficulty) {
+        conditions.push(eq(studyWorkbookPublications.difficulty, input.difficulty));
+      }
+
+      let orderByClause = desc(studyWorkbookPublications.publishedAt);
+      if (input.sort === 'rating') {
+        orderByClause = desc(sql`${avg(studyWorkbookReviews.rating)}`);
+      } else if (input.sort === 'popularity') {
+        orderByClause = desc(count(studyWorkbookLikes.id));
+      }
+
+      const items = await db
+        .select({
+          id: studyWorkbookPublications.id,
+          workbookId: studyWorkbookPublications.workbookId,
+          title: studyWorkbookPublications.title,
+          description: studyWorkbookPublications.description,
+          category: studyWorkbookPublications.category,
+          difficulty: studyWorkbookPublications.difficulty,
+          tags: studyWorkbookPublications.tags,
+          questionCount: count(studyQuestions.id),
+          avgRating: avg(studyWorkbookReviews.rating),
+          reviewCount: count(studyWorkbookReviews.id),
+          likeCount: count(studyWorkbookLikes.id),
+          publishedAt: studyWorkbookPublications.publishedAt,
+        })
+        .from(studyWorkbookPublications)
+        .leftJoin(studyWorkbooks, eq(studyWorkbookPublications.workbookId, studyWorkbooks.id))
+        .leftJoin(studyQuestions, eq(studyWorkbooks.id, studyQuestions.workbookId))
+        .leftJoin(studyWorkbookReviews, eq(studyWorkbookPublications.id, studyWorkbookReviews.publicationId))
+        .leftJoin(studyWorkbookLikes, eq(studyWorkbookPublications.id, studyWorkbookLikes.publicationId))
+        .where(and(...conditions))
+        .groupBy(studyWorkbookPublications.id)
+        .orderBy(orderByClause)
+        .limit(input.limit)
+        .offset(input.offset);
+
+      return { items };
+    }),
+
+  getPublicWorkbookDetail: protectedProcedure
+    .input(z.object({ publicationId: z.string().uuid() }))
+    .query(async ({ input, ctx }) => {
+      const [publication] = await db
+        .select()
+        .from(studyWorkbookPublications)
+        .where(
+          and(
+            eq(studyWorkbookPublications.id, input.publicationId),
+            eq(studyWorkbookPublications.visibility, 'public'),
+            eq(studyWorkbookPublications.status, 'published')
+          )
+        )
+        .limit(1);
+
+      if (!publication) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: '공개된 문제집을 찾을 수 없습니다.' });
+      }
+
+      const [stats] = await db
+        .select({
+          questionCount: count(studyQuestions.id),
+          avgRating: avg(studyWorkbookReviews.rating),
+          reviewCount: count(studyWorkbookReviews.id),
+          likeCount: count(studyWorkbookLikes.id),
+        })
+        .from(studyWorkbooks)
+        .leftJoin(studyQuestions, eq(studyWorkbooks.id, studyQuestions.workbookId))
+        .leftJoin(
+          studyWorkbookReviews,
+          and(eq(studyWorkbookPublications.id, studyWorkbookReviews.publicationId), eq(studyWorkbooks.id, studyWorkbookReviews.workbookId))
+        )
+        .leftJoin(
+          studyWorkbookLikes,
+          eq(studyWorkbookPublications.id, studyWorkbookLikes.publicationId)
+        )
+        .where(eq(studyWorkbooks.id, publication.workbookId));
+
+      const recentReviews = await db
+        .select()
+        .from(studyWorkbookReviews)
+        .where(eq(studyWorkbookReviews.publicationId, input.publicationId))
+        .orderBy(desc(studyWorkbookReviews.createdAt))
+        .limit(5);
+
+      const [isLiked] = await db
+        .select()
+        .from(studyWorkbookLikes)
+        .where(
+          and(
+            eq(studyWorkbookLikes.userId, ctx.userId),
+            eq(studyWorkbookLikes.publicationId, input.publicationId)
+          )
+        )
+        .limit(1);
+
+      const [inLibrary] = await db
+        .select()
+        .from(studyUserLibrary)
+        .where(
+          and(
+            eq(studyUserLibrary.userId, ctx.userId),
+            eq(studyUserLibrary.sourcePublicationId, input.publicationId)
+          )
+        )
+        .limit(1);
+
+      const [myReview] = await db
+        .select()
+        .from(studyWorkbookReviews)
+        .where(
+          and(
+            eq(studyWorkbookReviews.userId, ctx.userId),
+            eq(studyWorkbookReviews.publicationId, input.publicationId)
+          )
+        )
+        .limit(1);
+
+      return {
+        publication,
+        questionCount: stats?.questionCount ?? 0,
+        avgRating: stats?.avgRating ?? null,
+        reviewCount: stats?.reviewCount ?? 0,
+        likeCount: stats?.likeCount ?? 0,
+        recentReviews,
+        isLiked: !!isLiked,
+        isInLibrary: !!inLibrary,
+        myReview: myReview ?? null,
+      };
+    }),
+
+  addPublicWorkbookToMyLibrary: protectedProcedure
+    .input(z.object({ publicationId: z.string().uuid() }))
+    .mutation(async ({ input, ctx }) => {
+      const [pub] = await db
+        .select()
+        .from(studyWorkbookPublications)
+        .where(
+          and(
+            eq(studyWorkbookPublications.id, input.publicationId),
+            eq(studyWorkbookPublications.visibility, 'public'),
+            eq(studyWorkbookPublications.status, 'published')
+          )
+        )
+        .limit(1);
+
+      if (!pub) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: '공개된 문제집을 찾을 수 없습니다.' });
+      }
+
+      await db
+        .insert(studyUserLibrary)
+        .values({
+          userId: ctx.userId,
+          workbookId: pub.workbookId,
+          sourcePublicationId: input.publicationId,
+        })
+        .onConflictDoNothing();
+
+      return { added: true };
+    }),
+
+  removePublicWorkbookFromMyLibrary: protectedProcedure
+    .input(z.object({ publicationId: z.string().uuid() }))
+    .mutation(async ({ input, ctx }) => {
+      await db
+        .delete(studyUserLibrary)
+        .where(
+          and(
+            eq(studyUserLibrary.userId, ctx.userId),
+            eq(studyUserLibrary.sourcePublicationId, input.publicationId)
+          )
+        );
+
+      return { removed: true };
+    }),
+
+  listMyAddedPublicWorkbooks: protectedProcedure
+    .input(z.object({ limit: z.number().min(1).max(100).default(20), offset: z.number().min(0).default(0) }))
+    .query(async ({ input, ctx }) => {
+      const items = await db
+        .select()
+        .from(studyUserLibrary)
+        .innerJoin(
+          studyWorkbookPublications,
+          eq(studyUserLibrary.sourcePublicationId, studyWorkbookPublications.id)
+        )
+        .where(eq(studyUserLibrary.userId, ctx.userId))
+        .orderBy(desc(studyUserLibrary.addedAt))
+        .limit(input.limit)
+        .offset(input.offset);
+
+      return {
+        items: items.map((row) => row.study_workbook_publications),
+      };
+    }),
+
+  checkLibraryStatus: protectedProcedure
+    .input(z.object({ publicationId: z.string().uuid() }))
+    .query(async ({ input, ctx }) => {
+      const [inLibrary] = await db
+        .select()
+        .from(studyUserLibrary)
+        .where(
+          and(
+            eq(studyUserLibrary.userId, ctx.userId),
+            eq(studyUserLibrary.sourcePublicationId, input.publicationId)
+          )
+        )
+        .limit(1);
+
+      const [liked] = await db
+        .select()
+        .from(studyWorkbookLikes)
+        .where(
+          and(
+            eq(studyWorkbookLikes.userId, ctx.userId),
+            eq(studyWorkbookLikes.publicationId, input.publicationId)
+          )
+        )
+        .limit(1);
+
+      const [myReview] = await db
+        .select()
+        .from(studyWorkbookReviews)
+        .where(
+          and(
+            eq(studyWorkbookReviews.userId, ctx.userId),
+            eq(studyWorkbookReviews.publicationId, input.publicationId)
+          )
+        )
+        .limit(1);
+
+      return {
+        inLibrary: !!inLibrary,
+        liked: !!liked,
+        myReview: myReview ?? null,
+      };
+    }),
+
+  likeWorkbook: protectedProcedure
+    .input(z.object({ publicationId: z.string().uuid() }))
+    .mutation(async ({ input, ctx }) => {
+      const [existing] = await db
+        .select()
+        .from(studyWorkbookLikes)
+        .where(
+          and(
+            eq(studyWorkbookLikes.userId, ctx.userId),
+            eq(studyWorkbookLikes.publicationId, input.publicationId)
+          )
+        )
+        .limit(1);
+
+      if (existing) {
+        await db
+          .delete(studyWorkbookLikes)
+          .where(eq(studyWorkbookLikes.id, existing.id));
+        return { liked: false };
+      } else {
+        await db
+          .insert(studyWorkbookLikes)
+          .values({
+            userId: ctx.userId,
+            publicationId: input.publicationId,
+          });
+        return { liked: true };
+      }
+    }),
+
+  reviewWorkbook: protectedProcedure
+    .input(
+      z.object({
+        publicationId: z.string().uuid(),
+        rating: z.number().int().min(1).max(5),
+        comment: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const [existing] = await db
+        .select()
+        .from(studyWorkbookReviews)
+        .where(
+          and(
+            eq(studyWorkbookReviews.userId, ctx.userId),
+            eq(studyWorkbookReviews.publicationId, input.publicationId)
+          )
+        )
+        .limit(1);
+
+      const [pub] = await db
+        .select({ workbookId: studyWorkbookPublications.workbookId })
+        .from(studyWorkbookPublications)
+        .where(eq(studyWorkbookPublications.id, input.publicationId))
+        .limit(1);
+
+      if (!pub) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: '공개된 문제집을 찾을 수 없습니다.' });
+      }
+
+      let isNew = false;
+      if (existing) {
+        await db
+          .update(studyWorkbookReviews)
+          .set({ rating: input.rating, comment: input.comment, updatedAt: new Date() })
+          .where(eq(studyWorkbookReviews.id, existing.id));
+      } else {
+        isNew = true;
+        await db
+          .insert(studyWorkbookReviews)
+          .values({
+            workbookId: pub.workbookId,
+            publicationId: input.publicationId,
+            userId: ctx.userId,
+            rating: input.rating,
+            comment: input.comment,
+          });
+
+        await awardStudyReward({
+          userId: ctx.userId,
+          eventType: 'review_created',
+          sourceType: 'workbook_review',
+          sourceId: input.publicationId,
+          reason: '문제집 리뷰 작성',
+          idempotencyKey: `review:${ctx.userId}:${input.publicationId}`,
+        });
+      }
+
+      const [review] = await db
+        .select()
+        .from(studyWorkbookReviews)
+        .where(
+          and(
+            eq(studyWorkbookReviews.userId, ctx.userId),
+            eq(studyWorkbookReviews.publicationId, input.publicationId)
+          )
+        )
+        .limit(1);
+
+      return { isNew, review };
+    }),
+
+  reportWorkbook: protectedProcedure
+    .input(
+      z.object({
+        publicationId: z.string().uuid(),
+        reason: z.string().min(1).max(100),
+        detail: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const [pub] = await db
+        .select({ workbookId: studyWorkbookPublications.workbookId })
+        .from(studyWorkbookPublications)
+        .where(eq(studyWorkbookPublications.id, input.publicationId))
+        .limit(1);
+
+      if (!pub) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: '공개된 문제집을 찾을 수 없습니다.' });
+      }
+
+      const [existing] = await db
+        .select()
+        .from(studyReports)
+        .where(
+          and(
+            eq(studyReports.reporterId, ctx.userId),
+            eq(studyReports.targetId, pub.workbookId)
+          )
+        )
+        .limit(1);
+
+      if (existing) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: '이미 신고한 문제집입니다.',
+        });
+      }
+
+      const [report] = await db
+        .insert(studyReports)
+        .values({
+          targetType: 'workbook',
+          targetId: pub.workbookId,
+          reporterId: ctx.userId,
+          reason: input.reason,
+          detail: input.detail,
+          status: 'open',
+        })
+        .returning();
+
+      return { reported: true, reportId: report.id };
     }),
 });

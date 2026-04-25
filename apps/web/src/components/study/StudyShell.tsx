@@ -10,6 +10,7 @@ const navItems = [
   { href: '/study/wrong-notes', label: '오답' },
   { href: '/study/search', label: '검색' },
   { href: '/study/stats', label: '통계' },
+  { href: '/study/discover', label: '탐색' },
   { href: '/study/growth', label: '성장' },
   { href: '/study/profile', label: '프로필' },
 ];
