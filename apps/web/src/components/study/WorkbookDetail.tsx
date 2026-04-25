@@ -74,6 +74,14 @@ export function WorkbookDetail({ workbookId }: { workbookId: string }) {
         </Link>
       </div>
 
+      {/* 편집 액션 */}
+      <div>
+        <Link href={`/study/workbooks/${workbookId}/editor`}
+          className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-center text-sm font-semibold text-amber-700 hover:bg-amber-100">
+          문제 편집
+        </Link>
+      </div>
+
       {hasConceptData && (
         <Link href={`/study/workbooks/${workbookId}/concepts`}
           className="flex items-center justify-between rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 hover:bg-blue-100">

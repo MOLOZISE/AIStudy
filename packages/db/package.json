@@ -14,8 +14,7 @@
     "db:push": "drizzle-kit push:pg",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "db:generate": "drizzle-kit generate:pg",
-    "db:seed": "tsx src/seed.ts"
+    "db:generate": "drizzle-kit generate:pg"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.38.4",

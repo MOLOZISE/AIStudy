@@ -355,7 +355,7 @@ export async function importStudyWorkbook(input: ImportStudyWorkbookInput): Prom
     return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : '알 수 없는 import 오류가 발생했습니다.';
-    const errors: StudyImportRowError[] = [{ sheet: 'workbook', row: 0, message }];
+    const errors: StudyImportRowError[] = [{ sheet: 'workbook', row: 0, message, severity: 'error' }];
     const jobErrors = errors.map((rowError) => ({ ...rowError }));
     await db
       .update(studyImportJobs)

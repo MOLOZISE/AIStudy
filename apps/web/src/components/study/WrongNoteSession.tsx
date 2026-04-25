@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { trpc } from '@/lib/trpc';
+import { QuestionAnswerInput } from './QuestionAnswerInput';
 
 export function WrongNoteSession() {
   const router = useRouter();
@@ -165,21 +166,13 @@ export function WrongNoteSession() {
       </section>
 
       <section className="space-y-2">
-        {choices.length > 0 ? (
-          choices.map((choice, index) => (
-            <button key={`${choice}-${index}`} type="button"
-              onClick={() => setAnswer(current.questionId, choice)}
-              className={`w-full rounded-lg border p-4 text-left text-sm leading-6 ${
-                selectedAnswer === choice ? 'border-blue-600 bg-blue-50 text-blue-900' : 'border-slate-200 bg-white text-slate-800'
-              }`}>
-              {choice}
-            </button>
-          ))
-        ) : (
-          <textarea value={selectedAnswer} onChange={(e) => setAnswer(current.questionId, e.target.value)}
-            rows={4} placeholder="정답을 입력하세요."
-            className="w-full rounded-lg border border-slate-300 bg-white p-4 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100" />
-        )}
+        <QuestionAnswerInput
+          type={current.type}
+          choices={choices}
+          selectedAnswer={selectedAnswer}
+          onChange={(value) => setAnswer(current.questionId, value)}
+          disabled={submit.isLoading}
+        />
       </section>
 
       <div className="grid grid-cols-2 gap-2">

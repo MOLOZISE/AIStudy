@@ -40,7 +40,7 @@ export function SearchQuestions() {
       {data && (
         <div className="space-y-3">
           <p className="text-xs text-slate-500">
-            <span className="font-semibold text-slate-700">"{data.query}"</span> 검색 결과 {data.items.length}건
+            <span className="font-semibold text-slate-700">&lsquo;{data.query}&rsquo;</span> 검색 결과 {data.items.length}건
           </p>
           {data.items.length === 0 && (
             <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-500">검색 결과가 없습니다.</div>

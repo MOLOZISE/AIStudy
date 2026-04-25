@@ -1,6 +1,11 @@
 export type StudyWorkbookStatus = 'uploaded' | 'importing' | 'imported' | 'failed';
 export type StudyImportJobStatus = 'pending' | 'running' | 'completed' | 'failed';
-export type StudyQuestionType = 'multiple_choice' | 'short_answer' | 'ox' | 'essay';
+export type StudyQuestionType =
+  | 'multiple_choice' | 'multiple_choice_single'
+  | 'short_answer'
+  | 'true_false' | 'ox'
+  | 'essay' | 'essay_self_review';
+export type EssaySelfReview = '알고있음' | '부분이해' | '모름';
 export type StudyReviewStatus = 'approved' | 'needs_fix' | 'rejected' | 'draft';
 export type StudyWrongNoteStatus = 'open' | 'reviewing' | 'resolved';
 

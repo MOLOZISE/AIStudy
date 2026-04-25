@@ -27,6 +27,38 @@ function resolveAnswer(answer: string, choices: string[] | null): string {
   return answer;
 }
 
+// OX/true_false 정규화
+function normalizeOXAnswer(value: string): 'O' | 'X' | null {
+  const n = value.trim().toLowerCase();
+  if (['o', 'true', '맞음', '맞다', '예'].includes(n)) return 'O';
+  if (['x', 'false', '틀림', '틀리다', '아니오'].includes(n)) return 'X';
+  return null;
+}
+
+// 문제 타입 정규화
+function normalizeQuestionType(type: string | null | undefined): 'multiple_choice_single' | 'true_false' | 'short_answer' | 'essay_self_review' {
+  switch ((type ?? '').toLowerCase()) {
+    case 'multiple_choice':
+    case 'multiple_choice_single':
+    case 'choice':
+    case '객관식':
+      return 'multiple_choice_single';
+    case 'true_false':
+    case 'ox':
+    case 'o/x':
+      return 'true_false';
+    case 'short_answer':
+    case '단답형':
+      return 'short_answer';
+    case 'essay':
+    case 'essay_self_review':
+    case '주관식':
+      return 'essay_self_review';
+    default:
+      return 'multiple_choice_single';
+  }
+}
+
 async function createWrongNote(input: {
   userId: string;
   workbookId: string;
@@ -157,6 +189,8 @@ export const studyRouter = router({
           type: studyQuestions.type,
           prompt: studyQuestions.prompt,
           choices: studyQuestions.choices,
+          answer: studyQuestions.answer,
+          explanation: studyQuestions.explanation,
           difficulty: studyQuestions.difficulty,
           sourceSheet: studyQuestions.sourceSheet,
         })
@@ -181,6 +215,7 @@ export const studyRouter = router({
         .select({
           id: studyQuestions.id,
           workbookId: studyQuestions.workbookId,
+          type: studyQuestions.type,
           answer: studyQuestions.answer,
           choices: studyQuestions.choices,
           explanation: studyQuestions.explanation,
@@ -191,8 +226,20 @@ export const studyRouter = router({
 
       if (!question) throw new TRPCError({ code: 'NOT_FOUND', message: '문항을 찾을 수 없습니다.' });
 
+      const normalizedType = normalizeQuestionType(question.type);
       const correctAnswer = resolveAnswer(question.answer, question.choices as string[] | null);
-      const isCorrect = normalizeAnswer(input.selectedAnswer) === normalizeAnswer(correctAnswer);
+
+      let isCorrect: boolean;
+      if (normalizedType === 'essay_self_review') {
+        isCorrect = false;
+      } else if (normalizedType === 'true_false') {
+        const userOX = normalizeOXAnswer(input.selectedAnswer);
+        const correctOX = normalizeOXAnswer(correctAnswer);
+        isCorrect = userOX !== null && correctOX !== null && userOX === correctOX;
+      } else {
+        isCorrect = normalizeAnswer(input.selectedAnswer) === normalizeAnswer(correctAnswer);
+      }
+
       const [attempt] = await db
         .insert(studyAttempts)
         .values({
@@ -202,10 +249,11 @@ export const studyRouter = router({
           selectedAnswer: input.selectedAnswer,
           isCorrect,
           elapsedSeconds: input.elapsedSeconds,
+          metadata: { questionType: normalizedType },
         })
         .returning({ id: studyAttempts.id });
 
-      if (!isCorrect) {
+      if (!isCorrect && normalizedType !== 'essay_self_review') {
         await createWrongNote({ userId: ctx.userId, workbookId: question.workbookId, questionId: question.id, attemptId: attempt.id });
       }
 
@@ -214,7 +262,41 @@ export const studyRouter = router({
         isCorrect,
         correctAnswer,
         explanation: question.explanation,
+        questionType: normalizedType,
       };
+    }),
+
+  submitSelfReview: protectedProcedure
+    .input(
+      z.object({
+        attemptId: z.string().uuid(),
+        selfReview: z.enum(['알고있음', '부분이해', '모름']),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const [attempt] = await db
+        .select()
+        .from(studyAttempts)
+        .where(and(eq(studyAttempts.id, input.attemptId), eq(studyAttempts.userId, ctx.userId)))
+        .limit(1);
+
+      if (!attempt) throw new TRPCError({ code: 'NOT_FOUND', message: '응시 기록을 찾을 수 없습니다.' });
+
+      const isCorrect = input.selfReview === '알고있음';
+
+      await db
+        .update(studyAttempts)
+        .set({
+          isCorrect,
+          metadata: { ...(attempt.metadata as Record<string, unknown>), selfReview: input.selfReview },
+        })
+        .where(eq(studyAttempts.id, input.attemptId));
+
+      if (!isCorrect) {
+        await createWrongNote({ userId: ctx.userId, workbookId: attempt.workbookId, questionId: attempt.questionId, attemptId: attempt.id });
+      }
+
+      return { selfReview: input.selfReview, isCorrect };
     }),
 
   listExamSets: protectedProcedure
@@ -296,6 +378,7 @@ export const studyRouter = router({
           position: studyExamSetItems.position,
           questionId: studyQuestions.id,
           workbookId: studyQuestions.workbookId,
+          type: studyQuestions.type,
           prompt: studyQuestions.prompt,
           answer: studyQuestions.answer,
           choices: studyQuestions.choices,
@@ -314,7 +397,19 @@ export const studyRouter = router({
       for (const question of setQuestions) {
         const selectedAnswer = answerMap.get(question.questionId) ?? '';
         const correctAnswer = resolveAnswer(question.answer, question.choices as string[] | null);
-        const isCorrect = selectedAnswer ? normalizeAnswer(selectedAnswer) === normalizeAnswer(correctAnswer) : false;
+        const normalizedType = normalizeQuestionType(question.type);
+
+        let isCorrect: boolean;
+        if (normalizedType === 'essay_self_review') {
+          isCorrect = false;
+        } else if (normalizedType === 'true_false') {
+          const userOX = normalizeOXAnswer(selectedAnswer);
+          const correctOX = normalizeOXAnswer(correctAnswer);
+          isCorrect = userOX !== null && correctOX !== null && userOX === correctOX;
+        } else {
+          isCorrect = selectedAnswer ? normalizeAnswer(selectedAnswer) === normalizeAnswer(correctAnswer) : false;
+        }
+
         const [attempt] = await db
           .insert(studyAttempts)
           .values({
@@ -324,11 +419,11 @@ export const studyRouter = router({
             selectedAnswer: selectedAnswer || '(미응답)',
             isCorrect,
             elapsedSeconds: input.elapsedSeconds,
-            metadata: { examSetId: input.setId, position: question.position },
+            metadata: { examSetId: input.setId, position: question.position, questionType: normalizedType },
           })
           .returning({ id: studyAttempts.id });
 
-        if (!isCorrect) {
+        if (!isCorrect && normalizedType !== 'essay_self_review') {
           await createWrongNote({ userId: ctx.userId, workbookId: question.workbookId, questionId: question.questionId, attemptId: attempt.id });
         }
 
@@ -481,6 +576,7 @@ export const studyRouter = router({
         .select({
           id: studyQuestions.id,
           workbookId: studyQuestions.workbookId,
+          type: studyQuestions.type,
           prompt: studyQuestions.prompt,
           answer: studyQuestions.answer,
           choices: studyQuestions.choices,
@@ -498,7 +594,18 @@ export const studyRouter = router({
         if (!question) continue;
 
         const correctAnswer = resolveAnswer(question.answer, question.choices as string[] | null);
-        const isCorrect = normalizeAnswer(selectedAnswer) === normalizeAnswer(correctAnswer);
+        const normalizedType = normalizeQuestionType(question.type);
+
+        let isCorrect: boolean;
+        if (normalizedType === 'essay_self_review') {
+          isCorrect = false;
+        } else if (normalizedType === 'true_false') {
+          const userOX = normalizeOXAnswer(selectedAnswer);
+          const correctOX = normalizeOXAnswer(correctAnswer);
+          isCorrect = userOX !== null && correctOX !== null && userOX === correctOX;
+        } else {
+          isCorrect = normalizeAnswer(selectedAnswer) === normalizeAnswer(correctAnswer);
+        }
 
         const [attempt] = await db
           .insert(studyAttempts)
@@ -509,7 +616,7 @@ export const studyRouter = router({
             selectedAnswer,
             isCorrect,
             elapsedSeconds: input.elapsedSeconds,
-            metadata: { source: 'wrong_note_session' },
+            metadata: { source: 'wrong_note_session', questionType: normalizedType },
           })
           .returning({ id: studyAttempts.id });
 
@@ -519,7 +626,7 @@ export const studyRouter = router({
             .update(studyWrongNotes)
             .set({ status: 'resolved', resolvedAt: new Date(), updatedAt: new Date() })
             .where(and(eq(studyWrongNotes.userId, ctx.userId), eq(studyWrongNotes.questionId, questionId)));
-        } else {
+        } else if (normalizedType !== 'essay_self_review') {
           await createWrongNote({ userId: ctx.userId, workbookId: question.workbookId, questionId, attemptId: attempt.id });
         }
 
@@ -642,6 +749,7 @@ export const studyRouter = router({
         .select({
           id: studyQuestions.id,
           workbookId: studyQuestions.workbookId,
+          type: studyQuestions.type,
           prompt: studyQuestions.prompt,
           answer: studyQuestions.answer,
           choices: studyQuestions.choices,
@@ -658,7 +766,18 @@ export const studyRouter = router({
         const question = questionMap.get(questionId);
         if (!question) continue;
         const correctAnswer = resolveAnswer(question.answer, question.choices as string[] | null);
-        const isCorrect = normalizeAnswer(selectedAnswer) === normalizeAnswer(correctAnswer);
+        const normalizedType = normalizeQuestionType(question.type);
+
+        let isCorrect: boolean;
+        if (normalizedType === 'essay_self_review') {
+          isCorrect = false;
+        } else if (normalizedType === 'true_false') {
+          const userOX = normalizeOXAnswer(selectedAnswer);
+          const correctOX = normalizeOXAnswer(correctAnswer);
+          isCorrect = userOX !== null && correctOX !== null && userOX === correctOX;
+        } else {
+          isCorrect = normalizeAnswer(selectedAnswer) === normalizeAnswer(correctAnswer);
+        }
 
         const [attempt] = await db
           .insert(studyAttempts)
@@ -669,11 +788,11 @@ export const studyRouter = router({
             selectedAnswer,
             isCorrect,
             elapsedSeconds: input.elapsedSeconds,
-            metadata: { source: 'random_practice' },
+            metadata: { source: 'random_practice', questionType: normalizedType },
           })
           .returning({ id: studyAttempts.id });
 
-        if (!isCorrect) {
+        if (!isCorrect && normalizedType !== 'essay_self_review') {
           await createWrongNote({ userId: ctx.userId, workbookId: question.workbookId, questionId, attemptId: attempt.id });
         }
         results.push({ questionId, prompt: question.prompt, selectedAnswer, isCorrect, correctAnswer, explanation: question.explanation });
@@ -723,6 +842,91 @@ export const studyRouter = router({
         .limit(input.limit);
 
       return { items, query: input.query };
+    }),
+
+  // ── 문제 수정 ───────────────────────────────────────────────────────────────
+
+  updateQuestion: protectedProcedure
+    .input(
+      z.object({
+        questionId: z.string().uuid(),
+        prompt: z.string().min(1).optional(),
+        choices: z.array(z.string()).optional(),
+        answer: z.string().min(1).optional(),
+        explanation: z.string().optional(),
+        difficulty: z.enum(['상', '중', '하']).optional(),
+        type: z.string().optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      // Get question and check ownership via workbook
+      const [question] = await db
+        .select({
+          id: studyQuestions.id,
+          workbookId: studyQuestions.workbookId,
+          prompt: studyQuestions.prompt,
+          choices: studyQuestions.choices,
+          answer: studyQuestions.answer,
+          explanation: studyQuestions.explanation,
+          difficulty: studyQuestions.difficulty,
+          type: studyQuestions.type,
+        })
+        .from(studyQuestions)
+        .where(eq(studyQuestions.id, input.questionId))
+        .limit(1);
+
+      if (!question) throw new TRPCError({ code: 'NOT_FOUND', message: '문항을 찾을 수 없습니다.' });
+
+      // Check ownership
+      const [workbook] = await db
+        .select({ uploadedBy: studyWorkbooks.uploadedBy })
+        .from(studyWorkbooks)
+        .where(eq(studyWorkbooks.id, question.workbookId))
+        .limit(1);
+
+      if (!workbook) throw new TRPCError({ code: 'NOT_FOUND', message: '문제집을 찾을 수 없습니다.' });
+      if (workbook.uploadedBy !== ctx.userId) throw new TRPCError({ code: 'FORBIDDEN', message: '수정 권한이 없습니다.' });
+
+      // Prepare update values
+      const updates: Partial<typeof studyQuestions.$inferInsert> = {};
+      if (input.prompt !== undefined) updates.prompt = input.prompt;
+      if (input.choices !== undefined) updates.choices = input.choices;
+      if (input.answer !== undefined) updates.answer = input.answer;
+      if (input.explanation !== undefined) updates.explanation = input.explanation;
+      if (input.difficulty !== undefined) updates.difficulty = input.difficulty;
+      if (input.type !== undefined) updates.type = input.type;
+      updates.updatedAt = new Date();
+
+      await db.update(studyQuestions).set(updates).where(eq(studyQuestions.id, input.questionId));
+
+      return { updated: true };
+    }),
+
+  // ── 문제 숨김 ───────────────────────────────────────────────────────────────
+
+  hideQuestion: protectedProcedure
+    .input(z.object({ questionId: z.string().uuid(), hidden: z.boolean().default(true) }))
+    .mutation(async ({ input, ctx }) => {
+      const [question] = await db
+        .select({ workbookId: studyQuestions.workbookId })
+        .from(studyQuestions)
+        .where(eq(studyQuestions.id, input.questionId))
+        .limit(1);
+
+      if (!question) throw new TRPCError({ code: 'NOT_FOUND', message: '문항을 찾을 수 없습니다.' });
+
+      const [workbook] = await db
+        .select({ uploadedBy: studyWorkbooks.uploadedBy })
+        .from(studyWorkbooks)
+        .where(eq(studyWorkbooks.id, question.workbookId))
+        .limit(1);
+
+      if (!workbook) throw new TRPCError({ code: 'NOT_FOUND', message: '문제집을 찾을 수 없습니다.' });
+      if (workbook.uploadedBy !== ctx.userId) throw new TRPCError({ code: 'FORBIDDEN', message: '수정 권한이 없습니다.' });
+
+      await db.update(studyQuestions).set({ isHidden: input.hidden, updatedAt: new Date() }).where(eq(studyQuestions.id, input.questionId));
+
+      return { hidden: input.hidden };
     }),
 
   // ── 문제집 삭제 ───────────────────────────────────────────────────────────────
