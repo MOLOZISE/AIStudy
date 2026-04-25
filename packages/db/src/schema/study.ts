@@ -648,4 +648,42 @@ export const studyWorkbookLikesRelations = relations(studyWorkbookLikes, ({ one 
   }),
 }));
 
+export const studyWorkbookForks = pgTable(
+  'study_workbook_forks',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sourceWorkbookId: uuid('source_workbook_id')
+      .notNull()
+      .references(() => studyWorkbooks.id, { onDelete: 'cascade' }),
+    sourcePublicationId: uuid('source_publication_id')
+      .notNull()
+      .references(() => studyWorkbookPublications.id, { onDelete: 'cascade' }),
+    forkedWorkbookId: uuid('forked_workbook_id')
+      .notNull()
+      .references(() => studyWorkbooks.id, { onDelete: 'cascade' }),
+    forkedBy: uuid('forked_by').notNull(),
+    forkedAt: timestamp('forked_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => ({
+    sourceIdx: index('idx_swf_source_workbook_id').on(table.sourceWorkbookId),
+    forkedIdx: index('idx_swf_forked_workbook_id').on(table.forkedWorkbookId),
+    sourcePublicationIdx: index('idx_swf_source_publication_id').on(table.sourcePublicationId),
+  })
+);
+
+export const studyWorkbookForksRelations = relations(studyWorkbookForks, ({ one }) => ({
+  sourceWorkbook: one(studyWorkbooks, {
+    fields: [studyWorkbookForks.sourceWorkbookId],
+    references: [studyWorkbooks.id],
+  }),
+  forkedWorkbook: one(studyWorkbooks, {
+    fields: [studyWorkbookForks.forkedWorkbookId],
+    references: [studyWorkbooks.id],
+  }),
+  sourcePublication: one(studyWorkbookPublications, {
+    fields: [studyWorkbookForks.sourcePublicationId],
+    references: [studyWorkbookPublications.id],
+  }),
+}));
+
 export const studyQuestionVisibilityCheck = sql`study_questions.is_active = true AND study_questions.is_hidden = false`;

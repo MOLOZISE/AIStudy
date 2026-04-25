@@ -1,10 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { trpc } from '@/lib/trpc';
 
 export function PublicWorkbookDetail({ publicationId }: { publicationId: string }) {
+  const router = useRouter();
   const [showReportForm, setShowReportForm] = useState(false);
   const [reportReason, setReportReason] = useState('');
   const [reportDetail, setReportDetail] = useState('');
@@ -40,6 +42,12 @@ export function PublicWorkbookDetail({ publicationId }: { publicationId: string 
       setShowReportForm(false);
       setReportReason('');
       setReportDetail('');
+    },
+  });
+
+  const forkWorkbook = trpc.study.forkPublicWorkbook.useMutation({
+    onSuccess: (data) => {
+      router.push(`/study/workbooks/${data.forkedWorkbookId}`);
     },
   });
 
@@ -121,7 +129,7 @@ export function PublicWorkbookDetail({ publicationId }: { publicationId: string 
       </div>
 
       {/* Action Buttons */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <button
           onClick={() => {
             if (isInLibrary) {
@@ -148,6 +156,14 @@ export function PublicWorkbookDetail({ publicationId }: { publicationId: string 
           } disabled:bg-slate-300`}
         >
           {isLiked ? '❤️ 좋아요 취소' : '🤍 좋아요'}
+        </button>
+
+        <button
+          onClick={() => forkWorkbook.mutate({ publicationId })}
+          disabled={forkWorkbook.isPending}
+          className="rounded-lg border border-blue-300 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-100 disabled:bg-slate-300 transition-colors"
+        >
+          {forkWorkbook.isPending ? '복사 중...' : '📋 복사하기'}
         </button>
 
         <button

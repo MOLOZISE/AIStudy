@@ -9,6 +9,7 @@ import {
   studyExamSets,
   studyImportJobs,
   studyQuestions,
+  studySeeds,
   studySubjects,
   studyWorkbooks,
   studyWrongNotes,
@@ -17,6 +18,7 @@ import {
   studyWorkbookReviews,
   studyWorkbookLikes,
   studyReports,
+  studyWorkbookForks,
 } from '@repo/db';
 import { protectedProcedure, router } from '../../trpc.js';
 import { awardStudyReward, updateStudyStreak, getMyProgress, listRecentRewardEvents } from '../../gamification.js';
@@ -1852,5 +1854,302 @@ export const studyRouter = router({
         .returning();
 
       return { reported: true, reportId: report.id };
+    }),
+
+  // ──────────────────────────────────────────────────────────────────────
+  // P10: Workbook Fork and Revision
+  // ──────────────────────────────────────────────────────────────────────
+
+  forkPublicWorkbook: protectedProcedure
+    .input(
+      z.object({
+        publicationId: z.string().uuid(),
+        newTitle: z.string().min(1).max(500).optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const [pub] = await db
+        .select()
+        .from(studyWorkbookPublications)
+        .where(eq(studyWorkbookPublications.id, input.publicationId))
+        .limit(1);
+
+      if (!pub) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: '공개된 문제집을 찾을 수 없습니다.' });
+      }
+
+      if (pub.visibility !== 'public' || pub.status !== 'published') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: '공개된 문제집만 fork할 수 있습니다.',
+        });
+      }
+
+      const [sourceWorkbook] = await db
+        .select()
+        .from(studyWorkbooks)
+        .where(eq(studyWorkbooks.id, pub.workbookId))
+        .limit(1);
+
+      if (!sourceWorkbook) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: '원본 문제집을 찾을 수 없습니다.' });
+      }
+
+      // Create new forked workbook
+      const [newWorkbook] = await db
+        .insert(studyWorkbooks)
+        .values({
+          subjectId: sourceWorkbook.subjectId,
+          uploadedBy: ctx.userId,
+          originalFilename: input.newTitle || `${sourceWorkbook.originalFilename} (Fork)`,
+          storageBucket: sourceWorkbook.storageBucket,
+          storagePath: `${sourceWorkbook.storagePath}.fork.${Date.now()}`,
+          fileHash: sourceWorkbook.fileHash,
+          status: 'imported',
+          metadata: {
+            ...sourceWorkbook.metadata,
+            forkedFrom: pub.workbookId,
+            forkedFromPublicationId: input.publicationId,
+          },
+        })
+        .returning();
+
+      // Map old concept IDs to new ones
+      const conceptMap = new Map<string, string>();
+      const allConcepts = await db
+        .select()
+        .from(studyConcepts)
+        .where(eq(studyConcepts.workbookId, pub.workbookId));
+
+      for (const concept of allConcepts) {
+        const [newConcept] = await db
+          .insert(studyConcepts)
+          .values({
+            workbookId: newWorkbook.id,
+            subjectId: concept.subjectId,
+            parentId: concept.parentId ? conceptMap.get(concept.parentId) : null,
+            externalId: concept.externalId,
+            parentExternalId: concept.parentExternalId,
+            title: concept.title,
+            description: concept.description,
+            orderIndex: concept.orderIndex,
+            metadata: concept.metadata,
+          })
+          .returning();
+        conceptMap.set(concept.id, newConcept.id);
+      }
+
+      // Map old seed IDs to new ones
+      const seedMap = new Map<string, string>();
+      const allSeeds = await db
+        .select()
+        .from(studySeeds)
+        .where(eq(studySeeds.workbookId, pub.workbookId));
+
+      for (const seed of allSeeds) {
+        const [newSeed] = await db
+          .insert(studySeeds)
+          .values({
+            workbookId: newWorkbook.id,
+            subjectId: seed.subjectId,
+            conceptId: seed.conceptId ? conceptMap.get(seed.conceptId) : null,
+            externalId: seed.externalId,
+            title: seed.title,
+            content: seed.content,
+            metadata: seed.metadata,
+          })
+          .returning();
+        seedMap.set(seed.id, newSeed.id);
+      }
+
+      // Map old question IDs to new ones
+      const questionMap = new Map<string, string>();
+      const allQuestions = await db
+        .select()
+        .from(studyQuestions)
+        .where(eq(studyQuestions.workbookId, pub.workbookId));
+
+      for (const question of allQuestions) {
+        const [newQuestion] = await db
+          .insert(studyQuestions)
+          .values({
+            workbookId: newWorkbook.id,
+            subjectId: question.subjectId,
+            conceptId: question.conceptId ? conceptMap.get(question.conceptId) : null,
+            seedId: question.seedId ? seedMap.get(question.seedId) : null,
+            externalId: question.externalId,
+            questionNo: question.questionNo,
+            type: question.type,
+            prompt: question.prompt,
+            choices: question.choices,
+            answer: question.answer,
+            explanation: question.explanation,
+            difficulty: question.difficulty,
+            sourceSheet: question.sourceSheet,
+            reviewStatus: question.reviewStatus,
+            isActive: question.isActive,
+            isHidden: question.isHidden,
+            rowHash: question.rowHash,
+            raw: question.raw,
+          })
+          .returning();
+        questionMap.set(question.id, newQuestion.id);
+      }
+
+      // Copy exam sets and items with remapped question IDs
+      const allExamSets = await db
+        .select()
+        .from(studyExamSets)
+        .where(eq(studyExamSets.workbookId, pub.workbookId));
+
+      for (const examSet of allExamSets) {
+        const [newExamSet] = await db
+          .insert(studyExamSets)
+          .values({
+            workbookId: newWorkbook.id,
+            subjectId: examSet.subjectId,
+            externalId: examSet.externalId,
+            title: examSet.title,
+            description: examSet.description,
+            totalQuestions: examSet.totalQuestions,
+            metadata: examSet.metadata,
+          })
+          .returning();
+
+        const examSetItems = await db
+          .select()
+          .from(studyExamSetItems)
+          .where(eq(studyExamSetItems.setId, examSet.id));
+
+        for (const item of examSetItems) {
+          const newQuestionId = questionMap.get(item.questionId);
+          if (newQuestionId) {
+            await db.insert(studyExamSetItems).values({
+              setId: newExamSet.id,
+              questionId: newQuestionId,
+              position: item.position,
+              points: item.points,
+              metadata: item.metadata,
+            });
+          }
+        }
+      }
+
+      // Record fork relationship
+      await db.insert(studyWorkbookForks).values({
+        sourceWorkbookId: pub.workbookId,
+        sourcePublicationId: input.publicationId,
+        forkedWorkbookId: newWorkbook.id,
+        forkedBy: ctx.userId,
+      });
+
+      // Award fork reward
+      const idempotencyKey = `fork:${ctx.userId}:${newWorkbook.id}`;
+      await awardStudyReward({
+        userId: ctx.userId,
+        eventType: 'workbook_forked',
+        sourceType: 'workbook_fork',
+        sourceId: newWorkbook.id,
+        reason: `문제집 Fork: ${pub.title}`,
+        idempotencyKey,
+      });
+
+      return {
+        forkedWorkbookId: newWorkbook.id,
+        title: newWorkbook.originalFilename,
+      };
+    }),
+
+  getWorkbookForkInfo: protectedProcedure
+    .input(z.object({ workbookId: z.string().uuid() }))
+    .query(async ({ input }) => {
+      const [fork] = await db
+        .select()
+        .from(studyWorkbookForks)
+        .where(eq(studyWorkbookForks.forkedWorkbookId, input.workbookId))
+        .limit(1);
+
+      if (!fork) {
+        return null;
+      }
+
+      const [pub] = await db
+        .select()
+        .from(studyWorkbookPublications)
+        .where(eq(studyWorkbookPublications.id, fork.sourcePublicationId))
+        .limit(1);
+
+      if (!pub) {
+        return null;
+      }
+
+      return {
+        sourceWorkbookId: fork.sourceWorkbookId,
+        sourcePublicationId: fork.sourcePublicationId,
+        sourceTitle: pub.title,
+        sourceCategory: pub.category,
+        sourceDifficulty: pub.difficulty,
+        forkedAt: fork.forkedAt,
+      };
+    }),
+
+  listWorkbookForks: protectedProcedure
+    .input(
+      z.object({
+        publicationId: z.string().uuid(),
+        limit: z.number().min(1).max(100).default(20),
+        offset: z.number().min(0).default(0),
+      })
+    )
+    .query(async ({ input }) => {
+      const forks = await db
+        .select()
+        .from(studyWorkbookForks)
+        .where(eq(studyWorkbookForks.sourcePublicationId, input.publicationId))
+        .orderBy(desc(studyWorkbookForks.forkedAt))
+        .limit(input.limit)
+        .offset(input.offset);
+
+      const forkCount = await db
+        .select({ count: count() })
+        .from(studyWorkbookForks)
+        .where(eq(studyWorkbookForks.sourcePublicationId, input.publicationId));
+
+      return {
+        items: forks,
+        total: forkCount[0]?.count ?? 0,
+      };
+    }),
+
+  getSourceAttribution: protectedProcedure
+    .input(z.object({ workbookId: z.string().uuid() }))
+    .query(async ({ input }) => {
+      const [fork] = await db
+        .select()
+        .from(studyWorkbookForks)
+        .where(eq(studyWorkbookForks.forkedWorkbookId, input.workbookId))
+        .limit(1);
+
+      if (!fork) {
+        return null;
+      }
+
+      const [pub] = await db
+        .select()
+        .from(studyWorkbookPublications)
+        .where(eq(studyWorkbookPublications.id, fork.sourcePublicationId))
+        .limit(1);
+
+      if (!pub) {
+        return null;
+      }
+
+      return {
+        publicationId: pub.id,
+        sourceTitle: pub.title,
+        sourceCategory: pub.category,
+        sourceDifficulty: pub.difficulty,
+        forkedAt: fork.forkedAt,
+      };
     }),
 });

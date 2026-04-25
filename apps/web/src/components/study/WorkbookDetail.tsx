@@ -14,6 +14,7 @@ export function WorkbookDetail({ workbookId }: { workbookId: string }) {
   const workbook = trpc.study.getWorkbook.useQuery({ workbookId });
   const importJobs = trpc.study.listImportJobs.useQuery({ workbookId, limit: 5 });
   const concepts = trpc.study.listConcepts.useQuery({ workbookId });
+  const forkInfo = trpc.study.getWorkbookForkInfo.useQuery({ workbookId });
   const deleteWorkbook = trpc.study.deleteWorkbook.useMutation({
     onSuccess: () => router.push('/study/library'),
   });
@@ -47,6 +48,29 @@ export function WorkbookDetail({ workbookId }: { workbookId: string }) {
           </span>
         </div>
       </section>
+
+      {forkInfo.data && (
+        <section className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <p className="text-xs text-amber-700 mb-1">출처</p>
+          <Link href={`/study/discover/${forkInfo.data.sourcePublicationId}`} className="text-sm font-semibold text-amber-900 hover:text-amber-700">
+            {forkInfo.data.sourceTitle}
+          </Link>
+          {(forkInfo.data.sourceCategory || forkInfo.data.sourceDifficulty) && (
+            <div className="mt-2 flex gap-2 text-xs">
+              {forkInfo.data.sourceCategory && (
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-700">
+                  {forkInfo.data.sourceCategory}
+                </span>
+              )}
+              {forkInfo.data.sourceDifficulty && (
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-700">
+                  {forkInfo.data.sourceDifficulty}
+                </span>
+              )}
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="grid grid-cols-3 gap-2">
         <div className="rounded-lg border border-slate-200 bg-white p-3 text-center">

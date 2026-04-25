@@ -11,6 +11,7 @@ export const STUDY_REWARD_POLICY: Record<string, { xp: number; points: number }>
   exam_completed: { xp: 30, points: 30 },
   workbook_created: { xp: 20, points: 20 },
   workbook_published: { xp: 30, points: 30 },
+  workbook_forked: { xp: 15, points: 15 },
   comment_created: { xp: 3, points: 3 },
   review_created: { xp: 10, points: 10 },
   daily_quest_completed: { xp: 0, points: 0 }, // Dynamic from quest

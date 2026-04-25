@@ -176,6 +176,7 @@ export type StudyRewardEventType =
   | 'exam_completed'
   | 'workbook_created'
   | 'workbook_published'
+  | 'workbook_forked'
   | 'comment_created'
   | 'review_created';
 
@@ -264,4 +265,19 @@ export interface PublicWorkbookListItem {
   reviewCount: number;
   likeCount: number;
   publishedAt: Date | null;
+}
+
+export interface WorkbookForkInfo {
+  sourceWorkbookId: string;
+  sourcePublicationId: string;
+  forkedBy: string;
+  forkedAt: Date;
+}
+
+export interface WorkbookSourceAttribution {
+  publicationId: string;
+  sourceTitle: string;
+  sourceCategory?: string;
+  sourceDifficulty?: string;
+  forkedAt: Date;
 }
