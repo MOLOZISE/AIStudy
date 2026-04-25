@@ -8,7 +8,7 @@ export function DiscoverPage() {
   const [keyword, setKeyword] = useState('');
   const [category, setCategory] = useState('');
   const [difficulty, setDifficulty] = useState('');
-  const [sort, setSort] = useState<'latest' | 'rating' | 'popularity'>('latest');
+  const [sort, setSort] = useState<'latest' | 'rating' | 'popularity' | 'forks' | 'likes' | 'reviews'>('latest');
   const [limit] = useState(20);
   const [offset, setOffset] = useState(0);
 
@@ -108,6 +108,9 @@ export function DiscoverPage() {
               <option value="latest">최신순</option>
               <option value="rating">평점순</option>
               <option value="popularity">인기순</option>
+              <option value="forks">많이 복사됨</option>
+              <option value="likes">좋아요순</option>
+              <option value="reviews">리뷰순</option>
             </select>
           </div>
         </div>
@@ -195,8 +198,9 @@ export function DiscoverPage() {
                       <span className="text-slate-400">평점 없음</span>
                     )}
                   </div>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-2">
                     <span>❤️ {workbook.likeCount}</span>
+                    <span>📋 {workbook.forkCount ?? 0}</span>
                   </div>
                 </div>
               </Link>

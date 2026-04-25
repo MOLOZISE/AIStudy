@@ -3,18 +3,21 @@ import { TRPCError } from '@trpc/server';
 import { and, asc, avg, count, desc, eq, inArray, sql } from 'drizzle-orm';
 import {
   db,
+  profiles,
   studyAttempts,
   studyConcepts,
   studyExamSetItems,
   studyExamSets,
   studyImportJobs,
   studyQuestions,
+  studyRewardEvents,
   studySeeds,
   studySubjects,
+  studyUserLibrary,
+  studyUserProgress,
   studyWorkbooks,
   studyWrongNotes,
   studyWorkbookPublications,
-  studyUserLibrary,
   studyWorkbookReviews,
   studyWorkbookLikes,
   studyReports,
@@ -1445,7 +1448,7 @@ export const studyRouter = router({
         keyword: z.string().optional(),
         category: z.string().optional(),
         difficulty: z.string().optional(),
-        sort: z.enum(['latest', 'rating', 'popularity']).default('latest'),
+        sort: z.enum(['latest', 'rating', 'popularity', 'forks', 'likes', 'reviews']).default('latest'),
         limit: z.number().min(1).max(100).default(20),
         offset: z.number().min(0).default(0),
       })
@@ -1470,7 +1473,15 @@ export const studyRouter = router({
       if (input.sort === 'rating') {
         orderByClause = desc(sql`${avg(studyWorkbookReviews.rating)}`);
       } else if (input.sort === 'popularity') {
-        orderByClause = desc(count(studyWorkbookLikes.id));
+        orderByClause = desc(
+          sql`COUNT(DISTINCT ${studyWorkbookLikes.id}) * 2 + COUNT(DISTINCT ${studyWorkbookReviews.id}) * 3 + COALESCE(AVG(${studyWorkbookReviews.rating}), 0) * 10 + COUNT(DISTINCT ${studyWorkbookForks.id}) * 5`
+        );
+      } else if (input.sort === 'forks') {
+        orderByClause = desc(sql`COUNT(DISTINCT ${studyWorkbookForks.id})`);
+      } else if (input.sort === 'likes') {
+        orderByClause = desc(sql`COUNT(DISTINCT ${studyWorkbookLikes.id})`);
+      } else if (input.sort === 'reviews') {
+        orderByClause = desc(sql`COUNT(DISTINCT ${studyWorkbookReviews.id})`);
       }
 
       const items = await db
@@ -1486,6 +1497,7 @@ export const studyRouter = router({
           avgRating: avg(studyWorkbookReviews.rating),
           reviewCount: count(studyWorkbookReviews.id),
           likeCount: count(studyWorkbookLikes.id),
+          forkCount: sql<number>`COUNT(DISTINCT ${studyWorkbookForks.id})`,
           publishedAt: studyWorkbookPublications.publishedAt,
         })
         .from(studyWorkbookPublications)
@@ -1493,6 +1505,7 @@ export const studyRouter = router({
         .leftJoin(studyQuestions, eq(studyWorkbooks.id, studyQuestions.workbookId))
         .leftJoin(studyWorkbookReviews, eq(studyWorkbookPublications.id, studyWorkbookReviews.publicationId))
         .leftJoin(studyWorkbookLikes, eq(studyWorkbookPublications.id, studyWorkbookLikes.publicationId))
+        .leftJoin(studyWorkbookForks, eq(studyWorkbookPublications.id, studyWorkbookForks.sourcePublicationId))
         .where(and(...conditions))
         .groupBy(studyWorkbookPublications.id)
         .orderBy(orderByClause)
@@ -2151,5 +2164,258 @@ export const studyRouter = router({
         sourceDifficulty: pub.difficulty,
         forkedAt: fork.forkedAt,
       };
+    }),
+
+  // ──────────────────────────────────────────────────────────────────────
+  // P11: Ranking and Recommendation
+  // ──────────────────────────────────────────────────────────────────────
+
+  listRankedWorkbooks: protectedProcedure
+    .input(
+      z.object({
+        sort: z.enum(['latest', 'rating', 'popularity', 'forks', 'likes', 'reviews']).default('latest'),
+        limit: z.number().min(1).max(100).default(20),
+        offset: z.number().min(0).default(0),
+      })
+    )
+    .query(async ({ input }) => {
+      const conditions = [
+        eq(studyWorkbookPublications.visibility, 'public'),
+        eq(studyWorkbookPublications.status, 'published'),
+      ];
+
+      let orderByClause = desc(studyWorkbookPublications.publishedAt);
+      if (input.sort === 'rating') {
+        orderByClause = desc(sql`${avg(studyWorkbookReviews.rating)}`);
+      } else if (input.sort === 'popularity') {
+        orderByClause = desc(
+          sql`COUNT(DISTINCT ${studyWorkbookLikes.id}) * 2 + COUNT(DISTINCT ${studyWorkbookReviews.id}) * 3 + COALESCE(AVG(${studyWorkbookReviews.rating}), 0) * 10 + COUNT(DISTINCT ${studyWorkbookForks.id}) * 5`
+        );
+      } else if (input.sort === 'forks') {
+        orderByClause = desc(sql`COUNT(DISTINCT ${studyWorkbookForks.id})`);
+      } else if (input.sort === 'likes') {
+        orderByClause = desc(sql`COUNT(DISTINCT ${studyWorkbookLikes.id})`);
+      } else if (input.sort === 'reviews') {
+        orderByClause = desc(sql`COUNT(DISTINCT ${studyWorkbookReviews.id})`);
+      }
+
+      const items = await db
+        .select({
+          id: studyWorkbookPublications.id,
+          workbookId: studyWorkbookPublications.workbookId,
+          title: studyWorkbookPublications.title,
+          description: studyWorkbookPublications.description,
+          category: studyWorkbookPublications.category,
+          difficulty: studyWorkbookPublications.difficulty,
+          tags: studyWorkbookPublications.tags,
+          questionCount: count(studyQuestions.id),
+          avgRating: avg(studyWorkbookReviews.rating),
+          reviewCount: count(studyWorkbookReviews.id),
+          likeCount: count(studyWorkbookLikes.id),
+          forkCount: sql<number>`COUNT(DISTINCT ${studyWorkbookForks.id})`,
+          publishedAt: studyWorkbookPublications.publishedAt,
+        })
+        .from(studyWorkbookPublications)
+        .leftJoin(studyWorkbooks, eq(studyWorkbookPublications.workbookId, studyWorkbooks.id))
+        .leftJoin(studyQuestions, eq(studyWorkbooks.id, studyQuestions.workbookId))
+        .leftJoin(studyWorkbookReviews, eq(studyWorkbookPublications.id, studyWorkbookReviews.publicationId))
+        .leftJoin(studyWorkbookLikes, eq(studyWorkbookPublications.id, studyWorkbookLikes.publicationId))
+        .leftJoin(studyWorkbookForks, eq(studyWorkbookPublications.id, studyWorkbookForks.sourcePublicationId))
+        .where(and(...conditions))
+        .groupBy(studyWorkbookPublications.id)
+        .orderBy(orderByClause)
+        .limit(input.limit)
+        .offset(input.offset);
+
+      return { items };
+    }),
+
+  getWeeklyXpLeaderboard: protectedProcedure
+    .input(z.object({}))
+    .query(async ({ ctx }) => {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+      const leaderboard = await db
+        .select({
+          userId: studyRewardEvents.userId,
+          weeklyXp: sql<number>`SUM(${studyRewardEvents.xp})`,
+        })
+        .from(studyRewardEvents)
+        .where(sql`${studyRewardEvents.createdAt} >= ${sevenDaysAgo}`)
+        .groupBy(studyRewardEvents.userId)
+        .orderBy(desc(sql`SUM(${studyRewardEvents.xp})`))
+        .limit(20);
+
+      const items: Array<{ rank: number; userId: string; displayName: string; level: number; weeklyXp: number }> = [];
+
+      for (let i = 0; i < leaderboard.length; i++) {
+        const row = leaderboard[i];
+        const [profile] = await db
+          .select({ displayName: profiles.displayName })
+          .from(profiles)
+          .where(eq(profiles.id, row.userId))
+          .limit(1);
+
+        const [progress] = await db
+          .select({ level: studyUserProgress.level })
+          .from(studyUserProgress)
+          .where(eq(studyUserProgress.userId, row.userId))
+          .limit(1);
+
+        if (profile) {
+          items.push({
+            rank: i + 1,
+            userId: row.userId,
+            displayName: profile.displayName,
+            level: progress?.level ?? 1,
+            weeklyXp: row.weeklyXp,
+          });
+        }
+      }
+
+      let myRank: number | undefined;
+      let myWeeklyXp: number | undefined;
+
+      const [myStats] = await db
+        .select({
+          weeklyXp: sql<number>`SUM(${studyRewardEvents.xp})`,
+        })
+        .from(studyRewardEvents)
+        .where(
+          and(
+            sql`${studyRewardEvents.createdAt} >= ${sevenDaysAgo}`,
+            eq(studyRewardEvents.userId, ctx.userId)
+          )
+        )
+        .groupBy(studyRewardEvents.userId);
+
+      if (myStats) {
+        myWeeklyXp = myStats.weeklyXp;
+        myRank = items.findIndex((item) => item.userId === ctx.userId) + 1 || undefined;
+      }
+
+      return {
+        items,
+        myRank,
+        myWeeklyXp,
+      };
+    }),
+
+  getWeeklySolvedLeaderboard: protectedProcedure
+    .input(z.object({}))
+    .query(async ({ ctx }) => {
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+      const leaderboard = await db
+        .select({
+          userId: studyAttempts.userId,
+          solvedCount: sql<number>`COUNT(*)`,
+        })
+        .from(studyAttempts)
+        .where(sql`${studyAttempts.submittedAt} >= ${sevenDaysAgo}`)
+        .groupBy(studyAttempts.userId)
+        .orderBy(desc(sql`COUNT(*)`))
+        .limit(20);
+
+      const items: Array<{ rank: number; userId: string; displayName: string; level: number; solvedCount: number }> = [];
+
+      for (let i = 0; i < leaderboard.length; i++) {
+        const row = leaderboard[i];
+        const [profile] = await db
+          .select({ displayName: profiles.displayName })
+          .from(profiles)
+          .where(eq(profiles.id, row.userId))
+          .limit(1);
+
+        const [progress] = await db
+          .select({ level: studyUserProgress.level })
+          .from(studyUserProgress)
+          .where(eq(studyUserProgress.userId, row.userId))
+          .limit(1);
+
+        if (profile) {
+          items.push({
+            rank: i + 1,
+            userId: row.userId,
+            displayName: profile.displayName,
+            level: progress?.level ?? 1,
+            solvedCount: row.solvedCount,
+          });
+        }
+      }
+
+      let myRank: number | undefined;
+      let mySolvedCount: number | undefined;
+
+      const [myStats] = await db
+        .select({
+          solvedCount: sql<number>`COUNT(*)`,
+        })
+        .from(studyAttempts)
+        .where(
+          and(
+            sql`${studyAttempts.submittedAt} >= ${sevenDaysAgo}`,
+            eq(studyAttempts.userId, ctx.userId)
+          )
+        )
+        .groupBy(studyAttempts.userId);
+
+      if (myStats) {
+        mySolvedCount = myStats.solvedCount;
+        myRank = items.findIndex((item) => item.userId === ctx.userId) + 1 || undefined;
+      }
+
+      return {
+        items,
+        myRank,
+        mySolvedCount,
+      };
+    }),
+
+  getRecommendedWorkbooks: protectedProcedure
+    .input(
+      z.object({
+        limit: z.number().min(1).max(10).default(5),
+      })
+    )
+    .query(async ({ input, ctx }) => {
+      const items = await db
+        .select({
+          id: studyWorkbookPublications.id,
+          workbookId: studyWorkbookPublications.workbookId,
+          title: studyWorkbookPublications.title,
+          description: studyWorkbookPublications.description,
+          category: studyWorkbookPublications.category,
+          difficulty: studyWorkbookPublications.difficulty,
+          tags: studyWorkbookPublications.tags,
+          questionCount: count(studyQuestions.id),
+          avgRating: avg(studyWorkbookReviews.rating),
+          reviewCount: count(studyWorkbookReviews.id),
+          likeCount: count(studyWorkbookLikes.id),
+          forkCount: sql<number>`COUNT(DISTINCT ${studyWorkbookForks.id})`,
+          publishedAt: studyWorkbookPublications.publishedAt,
+        })
+        .from(studyWorkbookPublications)
+        .leftJoin(studyWorkbooks, eq(studyWorkbookPublications.workbookId, studyWorkbooks.id))
+        .leftJoin(studyQuestions, eq(studyWorkbooks.id, studyQuestions.workbookId))
+        .leftJoin(studyWorkbookReviews, eq(studyWorkbookPublications.id, studyWorkbookReviews.publicationId))
+        .leftJoin(studyWorkbookLikes, eq(studyWorkbookPublications.id, studyWorkbookLikes.publicationId))
+        .leftJoin(studyWorkbookForks, eq(studyWorkbookPublications.id, studyWorkbookForks.sourcePublicationId))
+        .where(
+          and(
+            eq(studyWorkbookPublications.visibility, 'public'),
+            eq(studyWorkbookPublications.status, 'published'),
+            sql`${studyWorkbookPublications.id} NOT IN (SELECT ${studyUserLibrary.sourcePublicationId} FROM ${studyUserLibrary} WHERE ${eq(studyUserLibrary.userId, ctx.userId)})`
+          )
+        )
+        .groupBy(studyWorkbookPublications.id)
+        .orderBy(
+          desc(
+            sql`COUNT(DISTINCT ${studyWorkbookLikes.id}) * 2 + COUNT(DISTINCT ${studyWorkbookReviews.id}) * 3 + COALESCE(AVG(${studyWorkbookReviews.rating}), 0) * 10 + COUNT(DISTINCT ${studyWorkbookForks.id}) * 5`
+          )
+        )
+        .limit(input.limit);
+
+      return { items };
     }),
 });

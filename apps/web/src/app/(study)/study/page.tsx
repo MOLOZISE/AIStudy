@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { StudyShell } from '@/components/study/StudyShell';
 import { GrowthCard } from '@/components/study/GrowthCard';
 import { QuestsCard } from '@/components/study/QuestsCard';
+import { RecommendedWorkbooksSection } from '@/components/study/RecommendedWorkbooksSection';
 
 const cards = [
   { href: '/study/library', title: '문제집 업로드', body: 'Excel 원본을 Storage에 저장하고 import job으로 적재 상태를 추적합니다.' },
@@ -18,6 +19,7 @@ export default function StudyHomePage() {
     >
       <GrowthCard />
       <QuestsCard />
+      <RecommendedWorkbooksSection />
       <div className="grid gap-3">
         {cards.map((card) => (
           <Link key={card.href} href={card.href} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">

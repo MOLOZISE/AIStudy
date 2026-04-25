@@ -11,6 +11,7 @@ const navItems = [
   { href: '/study/search', label: '검색' },
   { href: '/study/stats', label: '통계' },
   { href: '/study/discover', label: '탐색' },
+  { href: '/study/rankings', label: '랭킹' },
   { href: '/study/growth', label: '성장' },
   { href: '/study/profile', label: '프로필' },
 ];

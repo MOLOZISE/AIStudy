@@ -5,15 +5,15 @@
    ▲ Next.js 15.5.15
 
    Creating an optimized production build ...
- ✓ Compiled successfully in 7.3s
+ ✓ Compiled successfully in 5.7s
    Skipping linting
    Checking validity of types ...
    Collecting page data ...
-   Generating static pages (0/15) ...
-   Generating static pages (3/15) 
-   Generating static pages (7/15) 
-   Generating static pages (11/15) 
- ✓ Generating static pages (15/15)
+   Generating static pages (0/20) ...
+   Generating static pages (5/20) 
+   Generating static pages (10/20) 
+   Generating static pages (15/20) 
+ ✓ Generating static pages (20/20)
    Finalizing page optimization ...
    Collecting build traces ...
 
@@ -24,20 +24,26 @@ Route (app)                                     Size  First Load JS
 ├ ƒ /api/trpc/[trpc]                           127 B         102 kB
 ├ ○ /login                                   1.06 kB         164 kB
 ├ ○ /signup                                  1.49 kB         181 kB
-├ ○ /study                                     162 B         106 kB
+├ ○ /study                                   2.74 kB         125 kB
+├ ○ /study/discover                          2.11 kB         124 kB
+├ ƒ /study/discover/[publicationId]          2.63 kB         124 kB
 ├ ○ /study/exams                               913 B         123 kB
 ├ ƒ /study/exams/[setId]                     2.72 kB         124 kB
+├ ○ /study/growth                            1.93 kB         124 kB
 ├ ○ /study/library                           2.69 kB         124 kB
 ├ ƒ /study/practice                          3.12 kB         125 kB
+├ ○ /study/profile                           2.38 kB         124 kB
 ├ ƒ /study/questions/[questionId]            2.29 kB         124 kB
+├ ○ /study/quests                            1.58 kB         123 kB
+├ ○ /study/rankings                          1.91 kB         124 kB
 ├ ○ /study/search                            1.28 kB         123 kB
 ├ ○ /study/stats                             1.59 kB         123 kB
-├ ○ /study/templates                         4.28 kB         110 kB
-├ ƒ /study/workbooks/[workbookId]            2.35 kB         124 kB
+├ ○ /study/templates                         4.34 kB         110 kB
+├ ƒ /study/workbooks/[workbookId]            4.04 kB         126 kB
 ├ ƒ /study/workbooks/[workbookId]/concepts   1.43 kB         123 kB
-├ ƒ /study/workbooks/[workbookId]/editor     3.42 kB         125 kB
+├ ƒ /study/workbooks/[workbookId]/editor     3.48 kB         125 kB
 ├ ƒ /study/workbooks/[workbookId]/questions    908 B         123 kB
-├ ○ /study/wrong-notes                         948 B         123 kB
+├ ○ /study/wrong-notes                       1.91 kB         124 kB
 └ ○ /study/wrong-notes/session               2.77 kB         125 kB
 + First Load JS shared by all                 102 kB
   ├ chunks/495ed1de-ef13b73ea9667117.js      54.2 kB
