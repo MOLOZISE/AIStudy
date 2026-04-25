@@ -1,7 +1,40 @@
 import { db, studyQuests, studyUserQuestProgress } from '@repo/db';
 import { and, eq, gte, lte, isNull } from 'drizzle-orm';
-import type { QuestMetric } from '@repo/types';
+import type { QuestMetric, QuestType } from '@repo/types';
 import { awardStudyReward } from './gamification.js';
+
+// Quest period calculation helper
+export function getQuestPeriod(
+  type: QuestType,
+  now: Date = new Date()
+): { startsAt: Date; endsAt: Date } {
+  const date = new Date(now);
+  date.setHours(0, 0, 0, 0);
+
+  if (type === 'daily') {
+    const startsAt = date;
+    const endsAt = new Date(date);
+    endsAt.setDate(date.getDate() + 1);
+    return { startsAt, endsAt };
+  }
+
+  if (type === 'weekly') {
+    const startOfWeek = new Date(date);
+    // Monday = 1, so if today is Sunday (0), set to yesterday
+    startOfWeek.setDate(date.getDate() - (date.getDay() === 0 ? 6 : date.getDay() - 1));
+
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 7);
+
+    return { startsAt: startOfWeek, endsAt: endOfWeek };
+  }
+
+  // monthly
+  const startsAt = new Date(date.getFullYear(), date.getMonth(), 1);
+  const endsAt = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+
+  return { startsAt, endsAt };
+}
 
 // Quest metric mapping from reward events
 const METRIC_MAPPING: Record<string, QuestMetric[]> = {
@@ -97,6 +130,55 @@ export const INITIAL_QUESTS = [
     rewardPoints: 300,
   },
 ];
+
+async function ensureActiveQuests(type?: QuestType): Promise<void> {
+  try {
+    const now = new Date();
+    const targetTypes = type ? [type] : (['daily', 'weekly', 'monthly'] as const);
+
+    for (const questType of targetTypes) {
+      const period = getQuestPeriod(questType, now);
+      const quests = INITIAL_QUESTS.filter((q) => q.type === questType);
+
+      for (const questDef of quests) {
+        // Check if this quest already exists in this period using code + type + startsAt
+        const existing = await db
+          .select()
+          .from(studyQuests)
+          .where(
+            and(
+              eq(studyQuests.code, questDef.code),
+              eq(studyQuests.type, questType),
+              eq(studyQuests.startsAt, period.startsAt)
+            )
+          )
+          .limit(1);
+
+        if (!existing.length) {
+          // Insert new quest
+          await db.insert(studyQuests).values({
+            type: questType,
+            code: questDef.code,
+            title: questDef.title,
+            description: questDef.description,
+            metric: questDef.metric,
+            targetValue: questDef.targetValue,
+            rewardXp: questDef.rewardXp,
+            rewardPoints: questDef.rewardPoints,
+            startsAt: period.startsAt,
+            endsAt: period.endsAt,
+            isActive: true,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Failed to ensure active quests:', error);
+    // Non-blocking - don't throw
+  }
+}
 
 async function ensureUserQuestProgress(userId: string, questId: string): Promise<void> {
   const existing = await db
@@ -254,6 +336,9 @@ export async function claimQuestRewardInternal(userId: string, questId: string):
 }
 
 export async function getTodayQuests(userId: string) {
+  // Ensure daily quests exist before querying
+  await ensureActiveQuests('daily');
+
   const now = new Date();
   const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
@@ -291,6 +376,9 @@ export async function getTodayQuests(userId: string) {
 }
 
 export async function getWeeklyQuests(userId: string) {
+  // Ensure weekly quests exist before querying
+  await ensureActiveQuests('weekly');
+
   const now = new Date();
   const startOfWeek = new Date(now);
   startOfWeek.setDate(now.getDate() - now.getDay());
@@ -331,6 +419,9 @@ export async function getWeeklyQuests(userId: string) {
 }
 
 export async function getMonthlyQuests(userId: string) {
+  // Ensure monthly quests exist before querying
+  await ensureActiveQuests('monthly');
+
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
