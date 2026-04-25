@@ -319,6 +319,8 @@ export interface StudyAiGenerationJob {
   extractedTextPreview: string | null;
   resultPayload: Record<string, unknown> | null;
   errorPayload: Record<string, unknown> | null;
+  appliedWorkbookId: string | null;
+  appliedAt: string | null;
   createdAt: string | null;
   updatedAt: string | null;
 }

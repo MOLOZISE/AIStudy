@@ -759,12 +759,15 @@ export const studyAiGenerationJobs = pgTable(
     extractedTextPreview: text('extracted_text_preview'),
     resultPayload: jsonb('result_payload').$type<Record<string, unknown>>(),
     errorPayload: jsonb('error_payload').$type<Record<string, unknown>>(),
+    appliedWorkbookId: uuid('applied_workbook_id'),
+    appliedAt: timestamp('applied_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   },
   (table) => ({
     userIdIdx: index('idx_study_ai_generation_jobs_user_id').on(table.userId),
     statusIdx: index('idx_study_ai_generation_jobs_status').on(table.status),
+    appliedWorkbookIdIdx: index('idx_study_ai_generation_jobs_applied_workbook_id').on(table.appliedWorkbookId),
   })
 );
 

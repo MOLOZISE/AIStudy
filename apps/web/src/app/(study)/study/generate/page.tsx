@@ -89,7 +89,7 @@ export default function AiGeneratePage() {
 
             {/* Preview */}
             {selectedJobId && selectedJob && preview && (
-              <AiGenerationPreview job={selectedJob} preview={preview} />
+              <AiGenerationPreview job={selectedJob as any} preview={preview} />
             )}
           </>
         )}

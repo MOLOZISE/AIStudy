@@ -1,12 +1,15 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { utils, write } from 'xlsx';
-import type { AiGeneratedWorkbookDraft } from '@repo/types';
+import { trpc } from '@/lib/trpc';
+import { validateAiDraft, normalizeDraftForExport } from '@/lib/study/draftValidation';
+import type { AiGeneratedWorkbookDraft, StudyAiGenerationJob } from '@repo/types';
 
 interface AiGenerationPreviewProps {
-  job: { id: string };
+  job: StudyAiGenerationJob;
   preview: {
     status: string;
     progress: number | null;
@@ -15,8 +18,22 @@ interface AiGenerationPreviewProps {
   };
 }
 
-export function AiGenerationPreview({ preview }: AiGenerationPreviewProps) {
+export function AiGenerationPreview({ job, preview }: AiGenerationPreviewProps) {
+  const router = useRouter();
   const [showJson, setShowJson] = useState(false);
+  const [selectedQuestionIds, setSelectedQuestionIds] = useState<Set<string> | null>(null);
+  const [isApplying, setIsApplying] = useState(false);
+  const [applyError, setApplyError] = useState<string | null>(null);
+
+  const createWorkbook = trpc.study.createWorkbookFromAiDraft.useMutation({
+    onSuccess: (result) => {
+      router.push(`/study/workbooks/${result.workbookId}/editor`);
+    },
+    onError: (error) => {
+      setApplyError(error.message);
+      setIsApplying(false);
+    },
+  });
 
   if (preview.status === 'pending' || preview.status === 'extracting' || preview.status === 'generating') {
     return (
@@ -67,6 +84,11 @@ export function AiGenerationPreview({ preview }: AiGenerationPreviewProps) {
   }
 
   const draft = draftData;
+  const validation = validateAiDraft(draft);
+  const allQuestionIds = draft.questions?.map(q => q.externalId) ?? [];
+  const selected = selectedQuestionIds ?? new Set(allQuestionIds);
+  const selectedCount = Array.from(selected).filter(id => selected.has(id)).length;
+
   const questionCount = draft.questions?.length ?? 0;
   const conceptCount = draft.concepts?.length ?? 0;
   const seedCount = draft.seeds?.length ?? 0;
@@ -75,28 +97,45 @@ export function AiGenerationPreview({ preview }: AiGenerationPreviewProps) {
   const saCount = draft.questions?.filter(q => q.type === 'short_answer').length ?? 0;
   const essayCount = draft.questions?.filter(q => q.type === 'essay_self_review').length ?? 0;
 
+  function toggleQuestion(id: string) {
+    const updated = new Set(selected);
+    if (updated.has(id)) {
+      updated.delete(id);
+    } else {
+      updated.add(id);
+    }
+    setSelectedQuestionIds(updated);
+  }
+
+  function selectAll() {
+    setSelectedQuestionIds(new Set(allQuestionIds));
+  }
+
+  function deselectAll() {
+    setSelectedQuestionIds(new Set());
+  }
+
   function downloadExcel() {
+    const normalizedDraft = normalizeDraftForExport(draft, selectedCount > 0 ? selected : undefined);
     const workbook = utils.book_new();
 
-    // 1. 문제집정보
+    // 00_문제집정보
     const infoSheet = utils.aoa_to_sheet([
       ['항목', '값'],
-      ['문제집명', draft.workbook.title],
-      ['설명', draft.workbook.description || ''],
-      ['카테고리', draft.workbook.category || ''],
-      ['난이도', draft.workbook.difficulty || ''],
-      ['총 문항수', questionCount],
+      ['문제집명', normalizedDraft.workbook.title],
+      ['설명', normalizedDraft.workbook.description || ''],
+      ['카테고리', normalizedDraft.workbook.category || ''],
+      ['난이도', normalizedDraft.workbook.difficulty || ''],
+      ['총 문항수', normalizedDraft.questions.length],
       ['생성일', new Date().toLocaleDateString('ko-KR')],
-      ['', ''],
-      ['주의사항', 'AI 생성 결과는 반드시 검수 후 사용해주세요.'],
     ]);
     utils.book_append_sheet(workbook, infoSheet, '00_문제집정보');
 
-    // 2. 개념마스터
-    if (conceptCount > 0 && draft.concepts) {
+    // 01_개념마스터
+    if (normalizedDraft.concepts.length > 0) {
       const conceptSheet = utils.aoa_to_sheet([
         ['concept_id', 'concept_name', 'parent_concept_id', 'description'],
-        ...draft.concepts.map((c) => [
+        ...normalizedDraft.concepts.map((c) => [
           c.externalId,
           c.title,
           '',
@@ -106,11 +145,11 @@ export function AiGenerationPreview({ preview }: AiGenerationPreviewProps) {
       utils.book_append_sheet(workbook, conceptSheet, '01_개념마스터');
     }
 
-    // 3. 출제포인트표
-    if (seedCount > 0 && draft.seeds) {
+    // 02_출제포인트표
+    if (normalizedDraft.seeds.length > 0) {
       const seedSheet = utils.aoa_to_sheet([
         ['point_id', 'concept_id', 'point_name', 'weight'],
-        ...draft.seeds.map((s, i) => [
+        ...normalizedDraft.seeds.map((s, i) => [
           `p${i + 1}`,
           s.conceptExternalId || '',
           s.title || `포인트 ${i + 1}`,
@@ -120,11 +159,11 @@ export function AiGenerationPreview({ preview }: AiGenerationPreviewProps) {
       utils.book_append_sheet(workbook, seedSheet, '02_출제포인트표');
     }
 
-    // 4. 정식문제은행
-    if (questionCount > 0 && draft.questions) {
+    // 05_정식문제은행
+    if (normalizedDraft.questions.length > 0) {
       const qSheet = utils.aoa_to_sheet([
         ['question_id', 'concept_id', 'question_type', 'prompt', 'choice_1', 'choice_2', 'choice_3', 'choice_4', 'answer', 'explanation', 'difficulty'],
-        ...draft.questions.map((q) => {
+        ...normalizedDraft.questions.map((q) => {
           const choices = [...q.choices, '', '', ''].slice(0, 4);
           return [
             q.externalId,
@@ -137,43 +176,14 @@ export function AiGenerationPreview({ preview }: AiGenerationPreviewProps) {
             choices[3] || '',
             q.answer,
             q.explanation || '',
-            q.difficulty || 'medium',
+            q.difficulty || '중',
           ];
         }),
       ]);
       utils.book_append_sheet(workbook, qSheet, '05_정식문제은행');
     }
 
-    // 5. 모의고사 세트매핑
-    if (draft.examSets && draft.examSets.length > 0) {
-      const setSheet = utils.aoa_to_sheet([
-        ['set_id', 'set_name', 'set_description'],
-        ...draft.examSets.map((s) => [
-          s.externalId,
-          s.title,
-          s.description || '',
-        ]),
-      ]);
-
-      const itemSheet = utils.aoa_to_sheet([
-        ['set_id', 'question_id', 'position', 'points'],
-        ...draft.examSets.flatMap((s) =>
-          s.items.map((item) => [
-            s.externalId,
-            item.externalQuestionId,
-            item.position,
-            item.points || '',
-          ])
-        ),
-      ]);
-
-      utils.book_append_sheet(workbook, setSheet, '07_모의고사_세트');
-      utils.book_append_sheet(workbook, itemSheet, '07_모의고사_세트매핑');
-    }
-
-    // Download
-    const fileName = `${draft.workbook.title}_${new Date().toISOString().split('T')[0]}.xlsx`;
-    write(workbook, { bookType: 'xlsx', type: 'array' });
+    const fileName = `${normalizedDraft.workbook.title}_${new Date().toISOString().split('T')[0]}.xlsx`;
     const excelBuffer = write(workbook, { bookType: 'xlsx', type: 'array' });
     const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const url = URL.createObjectURL(blob);
@@ -182,6 +192,24 @@ export function AiGenerationPreview({ preview }: AiGenerationPreviewProps) {
     a.download = fileName;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function handleDirectApply() {
+    setApplyError(null);
+    setIsApplying(true);
+
+    try {
+      await createWorkbook.mutateAsync({
+        jobId: job.id,
+        selectedQuestionIds: selectedCount > 0 ? Array.from(selected) : undefined,
+        title: draft.workbook.title,
+        description: draft.workbook.description,
+      });
+    } catch (error: any) {
+      setApplyError(error.message);
+    } finally {
+      setIsApplying(false);
+    }
   }
 
   return (
@@ -194,12 +222,41 @@ export function AiGenerationPreview({ preview }: AiGenerationPreviewProps) {
         )}
       </div>
 
+      {/* Applied Status */}
+      {job.appliedWorkbookId && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+          <p className="text-sm text-emerald-900">
+            <strong>✓ 저장됨:</strong> 이미 문제은행으로 저장되었습니다.
+          </p>
+          <Link
+            href={`/study/workbooks/${job.appliedWorkbookId}`}
+            className="text-sm text-emerald-700 underline mt-2 inline-block"
+          >
+            저장된 문제집 보기 →
+          </Link>
+        </div>
+      )}
+
       {/* Warning */}
       <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
         <p className="text-xs text-amber-900">
-          <strong>⚠️ 검수 필요:</strong> 생성된 초안입니다. 정답/해설을 반드시 확인하고 필요시 수정해주세요.
+          <strong>⚠️ 검수 필요:</strong> AI가 생성한 초안입니다. 정답/해설을 반드시 확인하고 필요시 수정해주세요.
         </p>
       </div>
+
+      {/* Validation Errors */}
+      {validation.errors.length > 0 && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 space-y-2">
+          <p className="text-sm font-semibold text-red-900">검증 오류</p>
+          <div className="space-y-1 max-h-48 overflow-y-auto">
+            {validation.errors.map((err, idx) => (
+              <div key={idx} className={`text-xs ${err.type === 'error' ? 'text-red-700' : 'text-amber-700'}`}>
+                <strong>{err.field}:</strong> {err.message}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -216,12 +273,12 @@ export function AiGenerationPreview({ preview }: AiGenerationPreviewProps) {
           <p className="mt-1 text-2xl font-bold text-slate-900">{seedCount}</p>
         </div>
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-center">
-          <p className="text-xs text-slate-500">세트</p>
-          <p className="mt-1 text-2xl font-bold text-slate-900">{draft.examSets?.length ?? 0}</p>
+          <p className="text-xs text-slate-500">선택된</p>
+          <p className="mt-1 text-2xl font-bold text-slate-900">{selectedCount}/{questionCount}</p>
         </div>
       </div>
 
-      {/* Question Types */}
+      {/* Question Type Distribution */}
       {questionCount > 0 && (
         <div className="space-y-2">
           <p className="text-sm font-semibold text-slate-700">문제 유형 분포</p>
@@ -230,6 +287,48 @@ export function AiGenerationPreview({ preview }: AiGenerationPreviewProps) {
             {tfCount > 0 && <p>참/거짓: {tfCount}개</p>}
             {saCount > 0 && <p>단답형: {saCount}개</p>}
             {essayCount > 0 && <p>주관식: {essayCount}개</p>}
+          </div>
+        </div>
+      )}
+
+      {/* Question Selection */}
+      {questionCount > 0 && !job.appliedWorkbookId && (
+        <div className="space-y-3 border-t border-slate-200 pt-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-slate-700">포함할 문제 선택</p>
+            <div className="flex gap-2">
+              <button
+                onClick={selectAll}
+                className="text-xs text-blue-600 hover:text-blue-700 font-semibold"
+              >
+                전체 선택
+              </button>
+              <button
+                onClick={deselectAll}
+                className="text-xs text-slate-600 hover:text-slate-700 font-semibold"
+              >
+                전체 해제
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2 max-h-64 overflow-y-auto border border-slate-200 rounded-lg p-3 bg-slate-50">
+            {draft.questions?.map((q, idx) => (
+              <label
+                key={q.externalId}
+                className="flex items-start gap-2 text-xs text-slate-700 cursor-pointer hover:bg-white p-2 rounded transition-colors"
+              >
+                <input
+                  type="checkbox"
+                  checked={selected.has(q.externalId)}
+                  onChange={() => toggleQuestion(q.externalId)}
+                  className="mt-1"
+                />
+                <span className="min-w-0 flex-1">
+                  <strong>#{idx + 1}</strong> {q.prompt.substring(0, 60)}...
+                </span>
+              </label>
+            ))}
           </div>
         </div>
       )}
@@ -260,21 +359,33 @@ export function AiGenerationPreview({ preview }: AiGenerationPreviewProps) {
       )}
 
       {/* Actions */}
-      <div className="grid grid-cols-2 gap-3 border-t border-slate-200 pt-4">
-        <button
-          onClick={downloadExcel}
-          className="rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 transition-colors"
-        >
-          📥 Excel 다운로드
-        </button>
+      {!job.appliedWorkbookId && (
+        <div>
+          {applyError && (
+            <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              {applyError}
+            </div>
+          )}
 
-        <Link
-          href="/study/library"
-          className="rounded-lg border border-blue-300 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition-colors text-center"
-        >
-          📤 Import하기
-        </Link>
-      </div>
+          <div className="grid grid-cols-2 gap-3 border-t border-slate-200 pt-4">
+            <button
+              onClick={downloadExcel}
+              disabled={validation.errors.some(e => e.type === 'error')}
+              className="rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300 transition-colors"
+            >
+              📥 Excel 다운로드
+            </button>
+
+            <button
+              onClick={handleDirectApply}
+              disabled={isApplying || validation.errors.some(e => e.type === 'error') || selectedCount === 0}
+              className="rounded-lg bg-emerald-600 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:bg-slate-300 transition-colors"
+            >
+              {isApplying ? '저장 중...' : '📚 저장하기'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* JSON Toggle */}
       <div className="border-t border-slate-200 pt-4 space-y-2">
@@ -287,7 +398,7 @@ export function AiGenerationPreview({ preview }: AiGenerationPreviewProps) {
 
         {showJson && (
           <pre className="overflow-x-auto rounded-lg bg-slate-900 p-3 text-xs text-slate-100 max-h-64 overflow-y-auto">
-            {JSON.stringify({ workbook: draft.workbook, conceptCount, questionCount }, null, 2)}
+            {JSON.stringify({ workbook: draft.workbook, stats: validation.stats }, null, 2)}
           </pre>
         )}
       </div>

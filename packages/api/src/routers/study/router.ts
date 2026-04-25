@@ -2918,4 +2918,196 @@ export const studyRouter = router({
 
       return updated[0];
     }),
+
+  createWorkbookFromAiDraft: protectedProcedure
+    .input(z.object({
+      jobId: z.string().uuid(),
+      selectedQuestionIds: z.array(z.string()).optional(),
+      title: z.string().optional(),
+      description: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const job = await db.query.studyAiGenerationJobs.findFirst({
+        where: eq(studyAiGenerationJobs.id, input.jobId),
+      });
+
+      if (!job || job.userId !== ctx.userId) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'AI generation job을 찾을 수 없습니다.' });
+      }
+
+      if (job.status !== 'ready') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: '생성이 완료되지 않은 작업입니다.' });
+      }
+
+      if (job.appliedWorkbookId) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: '이미 문제은행으로 저장된 작업입니다.' });
+      }
+
+      // Use server action to apply draft
+      // For now, we'll implement a simplified version inline
+      const { randomUUID } = await import('node:crypto');
+      const workbookId = randomUUID();
+
+      const draft = job.resultPayload?.draft as any;
+      if (!draft) {
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: '생성된 초안을 찾을 수 없습니다.' });
+      }
+
+      try {
+        // Create workbook
+        const [workbook] = await db
+          .insert(studyWorkbooks)
+          .values({
+            id: workbookId,
+            uploadedBy: ctx.userId,
+            originalFilename: input.title || draft.workbook.title,
+            storageBucket: 'study-workbooks',
+            storagePath: `ai-draft/${ctx.userId}/${workbookId}`,
+            status: 'uploaded',
+            metadata: {
+              aiGenerated: true,
+              aiJobId: input.jobId,
+              needsReview: true,
+              description: input.description || draft.workbook.description,
+            },
+          })
+          .returning();
+
+        if (!workbook) {
+          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: '문제은행 생성에 실패했습니다.' });
+        }
+
+        // Create concepts
+        const conceptIdMap = new Map<string, string>();
+        if (draft.concepts?.length > 0) {
+          const concepts = await db
+            .insert(studyConcepts)
+            .values(
+              draft.concepts.map((c: any) => ({
+                workbookId,
+                externalId: c.externalId,
+                title: c.title,
+                description: c.description,
+                orderIndex: c.orderIndex || 0,
+                metadata: { aiGenerated: true },
+              }))
+            )
+            .returning({ id: studyConcepts.id, externalId: studyConcepts.externalId });
+
+          concepts.forEach((c) => conceptIdMap.set(c.externalId, c.id));
+        }
+
+        // Create seeds
+        const seedIdMap = new Map<string, string>();
+        if (draft.seeds?.length > 0) {
+          const seeds = await db
+            .insert(studySeeds)
+            .values(
+              draft.seeds.map((s: any) => ({
+                workbookId,
+                conceptId: s.conceptExternalId ? conceptIdMap.get(s.conceptExternalId) : undefined,
+                externalId: s.externalId,
+                title: s.title,
+                content: s.content,
+                metadata: { aiGenerated: true },
+              }))
+            )
+            .returning({ id: studySeeds.id, externalId: studySeeds.externalId });
+
+          seeds.forEach((s) => seedIdMap.set(s.externalId, s.id));
+        }
+
+        // Create questions
+        const selectedIds = input.selectedQuestionIds ? new Set(input.selectedQuestionIds) : undefined;
+        const questionIdMap = new Map<string, string>();
+        if (draft.questions?.length > 0) {
+          const questionsToInsert = selectedIds
+            ? draft.questions.filter((q: any) => selectedIds.has(q.externalId))
+            : draft.questions;
+
+          if (questionsToInsert.length > 0) {
+            const questions = await db
+              .insert(studyQuestions)
+              .values(
+                questionsToInsert.map((q: any) => ({
+                  workbookId,
+                  conceptId: q.conceptExternalId ? conceptIdMap.get(q.conceptExternalId) : undefined,
+                  seedId: q.seedExternalId ? seedIdMap.get(q.seedExternalId) : undefined,
+                  externalId: q.externalId,
+                  questionNo: q.questionNo,
+                  type: q.type,
+                  prompt: q.prompt,
+                  choices: q.choices,
+                  answer: q.answer,
+                  explanation: q.explanation,
+                  difficulty: q.difficulty,
+                  sourceSheet: '05_정식문제은행',
+                  reviewStatus: 'draft',
+                  isActive: true,
+                  isHidden: false,
+                  raw: q,
+                  metadata: { aiGenerated: true, needsReview: true },
+                }))
+              )
+              .returning({ id: studyQuestions.id, externalId: studyQuestions.externalId });
+
+            questions.forEach((q) => questionIdMap.set(q.externalId, q.id));
+          }
+        }
+
+        // Create exam sets
+        if (draft.examSets?.length > 0) {
+          for (const set of draft.examSets) {
+            const [examSet] = await db
+              .insert(studyExamSets)
+              .values({
+                workbookId,
+                externalId: set.externalId,
+                title: set.title,
+                description: set.description,
+                totalQuestions: set.items?.length ?? 0,
+                metadata: { aiGenerated: true },
+              })
+              .returning({ id: studyExamSets.id });
+
+            if (examSet && set.items?.length > 0) {
+              await db
+                .insert(studyExamSetItems)
+                .values(
+                  set.items
+                    .filter((item: any) => questionIdMap.has(item.externalQuestionId))
+                    .map((item: any) => ({
+                      setId: examSet.id,
+                      questionId: questionIdMap.get(item.externalQuestionId)!,
+                      position: item.position,
+                      points: item.points || '1',
+                      metadata: {},
+                    }))
+                );
+            }
+          }
+        }
+
+        // Update job
+        await db
+          .update(studyAiGenerationJobs)
+          .set({
+            appliedWorkbookId: workbookId,
+            appliedAt: new Date(),
+          })
+          .where(eq(studyAiGenerationJobs.id, input.jobId));
+
+        return {
+          workbookId,
+          conceptCount: conceptIdMap.size,
+          seedCount: seedIdMap.size,
+          questionCount: questionIdMap.size,
+        };
+      } catch (error: any) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: `문제은행 생성 실패: ${error.message}`,
+        });
+      }
+    }),
 });
