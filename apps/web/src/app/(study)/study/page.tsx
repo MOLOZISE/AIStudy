@@ -1,5 +1,7 @@
 import Link from 'next/link';
 import { StudyShell } from '@/components/study/StudyShell';
+import { GrowthCard } from '@/components/study/GrowthCard';
+import { QuestsCard } from '@/components/study/QuestsCard';
 
 const cards = [
   { href: '/study/library', title: '문제집 업로드', body: 'Excel 원본을 Storage에 저장하고 import job으로 적재 상태를 추적합니다.' },
@@ -14,6 +16,8 @@ export default function StudyHomePage() {
       title="Excel 문제은행 학습"
       description="정식문제은행, 개념마스터, 출제포인트표, 세트매핑을 study 도메인으로 분리해 모바일 풀이 흐름으로 연결합니다."
     >
+      <GrowthCard />
+      <QuestsCard />
       <div className="grid gap-3">
         {cards.map((card) => (
           <Link key={card.href} href={card.href} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">

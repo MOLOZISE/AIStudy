@@ -246,8 +246,12 @@ export const studyWrongNotes = pgTable(
     status: varchar('status', { length: 40 }).notNull().default('open'),
     note: text('note'),
     wrongCount: integer('wrong_count').notNull().default(1),
+    reviewCount: integer('review_count').notNull().default(0),
     lastWrongAt: timestamp('last_wrong_at', { withTimezone: true }).defaultNow(),
+    lastReviewedAt: timestamp('last_reviewed_at', { withTimezone: true }),
     resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    masteredAt: timestamp('mastered_at', { withTimezone: true }),
+    ignoredAt: timestamp('ignored_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
   },
@@ -379,6 +383,98 @@ export const studyAttemptsRelations = relations(studyAttempts, ({ one, many }) =
   wrongNotes: many(studyWrongNotes),
 }));
 
+export const studyUserProgress = pgTable(
+  'study_user_progress',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull().unique(),
+    level: integer('level').notNull().default(1),
+    totalXp: integer('total_xp').notNull().default(0),
+    totalPoints: integer('total_points').notNull().default(0),
+    currentStreak: integer('current_streak').notNull().default(0),
+    longestStreak: integer('longest_streak').notNull().default(0),
+    lastStudyDate: timestamp('last_study_date', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => ({
+    userIdx: uniqueIndex('idx_study_user_progress_user_id').on(table.userId),
+  })
+);
+
+export const studyRewardEvents = pgTable(
+  'study_reward_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull(),
+    eventType: varchar('event_type', { length: 120 }).notNull(),
+    sourceType: varchar('source_type', { length: 120 }).notNull(),
+    sourceId: uuid('source_id'),
+    points: integer('points').notNull().default(0),
+    xp: integer('xp').notNull().default(0),
+    reason: text('reason'),
+    idempotencyKey: varchar('idempotency_key', { length: 255 }).unique(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => ({
+    userIdx: index('idx_study_reward_events_user_id').on(table.userId),
+    eventTypeIdx: index('idx_study_reward_events_event_type').on(table.eventType),
+    createdAtIdx: index('idx_study_reward_events_created_at').on(table.createdAt),
+    idempotencyIdx: uniqueIndex('idx_study_reward_events_idempotency').on(table.idempotencyKey),
+  })
+);
+
+export const studyQuests = pgTable(
+  'study_quests',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    type: varchar('type', { length: 40 }).notNull(), // 'daily' | 'weekly' | 'monthly'
+    code: varchar('code', { length: 120 }).notNull(),
+    title: varchar('title', { length: 255 }).notNull(),
+    description: text('description'),
+    metric: varchar('metric', { length: 120 }).notNull(), // 'solve_questions', 'correct_answers', etc.
+    targetValue: integer('target_value').notNull(),
+    rewardXp: integer('reward_xp').notNull(),
+    rewardPoints: integer('reward_points').notNull(),
+    startsAt: timestamp('starts_at', { withTimezone: true }).notNull(),
+    endsAt: timestamp('ends_at', { withTimezone: true }).notNull(),
+    isActive: boolean('is_active').notNull().default(true),
+    createdBy: uuid('created_by'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => ({
+    codeIdx: uniqueIndex('idx_study_quests_code').on(table.code),
+    typeIdx: index('idx_study_quests_type').on(table.type),
+    startsAtIdx: index('idx_study_quests_starts_at').on(table.startsAt),
+    endsAtIdx: index('idx_study_quests_ends_at').on(table.endsAt),
+    isActiveIdx: index('idx_study_quests_is_active').on(table.isActive),
+  })
+);
+
+export const studyUserQuestProgress = pgTable(
+  'study_user_quest_progress',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull(),
+    questId: uuid('quest_id')
+      .notNull()
+      .references(() => studyQuests.id, { onDelete: 'cascade' }),
+    currentValue: integer('current_value').notNull().default(0),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    claimedAt: timestamp('claimed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => ({
+    userQuestIdx: uniqueIndex('idx_study_user_quest_progress_user_quest').on(table.userId, table.questId),
+    userIdx: index('idx_study_user_quest_progress_user_id').on(table.userId),
+    questIdx: index('idx_study_user_quest_progress_quest_id').on(table.questId),
+    completedAtIdx: index('idx_study_user_quest_progress_completed_at').on(table.completedAt),
+    claimedAtIdx: index('idx_study_user_quest_progress_claimed_at').on(table.claimedAt),
+  })
+);
+
 export const studyWrongNotesRelations = relations(studyWrongNotes, ({ one }) => ({
   workbook: one(studyWorkbooks, {
     fields: [studyWrongNotes.workbookId],
@@ -391,6 +487,28 @@ export const studyWrongNotesRelations = relations(studyWrongNotes, ({ one }) => 
   attempt: one(studyAttempts, {
     fields: [studyWrongNotes.attemptId],
     references: [studyAttempts.id],
+  }),
+}));
+
+export const studyUserProgressRelations = relations(studyUserProgress, ({ many }) => ({
+  rewardEvents: many(studyRewardEvents),
+}));
+
+export const studyRewardEventsRelations = relations(studyRewardEvents, ({ one }) => ({
+  userProgress: one(studyUserProgress, {
+    fields: [studyRewardEvents.userId],
+    references: [studyUserProgress.userId],
+  }),
+}));
+
+export const studyQuestsRelations = relations(studyQuests, ({ many }) => ({
+  userProgress: many(studyUserQuestProgress),
+}));
+
+export const studyUserQuestProgressRelations = relations(studyUserQuestProgress, ({ one }) => ({
+  quest: one(studyQuests, {
+    fields: [studyUserQuestProgress.questId],
+    references: [studyQuests.id],
   }),
 }));
 

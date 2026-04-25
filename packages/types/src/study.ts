@@ -7,7 +7,7 @@ export type StudyQuestionType =
   | 'essay' | 'essay_self_review';
 export type EssaySelfReview = '알고있음' | '부분이해' | '모름';
 export type StudyReviewStatus = 'approved' | 'needs_fix' | 'rejected' | 'draft';
-export type StudyWrongNoteStatus = 'open' | 'reviewing' | 'resolved';
+export type StudyWrongNoteStatus = 'open' | 'reviewing' | 'mastered' | 'ignored' | 'resolved';
 
 export interface StudySubject {
   id: string;
@@ -145,8 +145,87 @@ export interface StudyWrongNote {
   status: StudyWrongNoteStatus;
   note?: string;
   wrongCount: number;
+  reviewCount: number;
   lastWrongAt: Date;
+  lastReviewedAt?: Date;
   resolvedAt?: Date;
+  masteredAt?: Date;
+  ignoredAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface StudyUserProgress {
+  id: string;
+  userId: string;
+  level: number;
+  totalXp: number;
+  totalPoints: number;
+  currentStreak: number;
+  longestStreak: number;
+  lastStudyDate?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type StudyRewardEventType =
+  | 'question_attempt'
+  | 'question_correct_bonus'
+  | 'wrong_note_review_success'
+  | 'wrong_note_marked_mastered'
+  | 'exam_completed'
+  | 'workbook_created'
+  | 'workbook_published'
+  | 'comment_created'
+  | 'review_created';
+
+export interface StudyRewardEvent {
+  id: string;
+  userId: string;
+  eventType: StudyRewardEventType;
+  sourceType: string;
+  sourceId?: string;
+  points: number;
+  xp: number;
+  reason?: string;
+  idempotencyKey?: string;
+  createdAt: Date;
+}
+
+export type QuestType = 'daily' | 'weekly' | 'monthly';
+export type QuestMetric =
+  | 'solve_questions'
+  | 'correct_answers'
+  | 'review_wrong_notes'
+  | 'complete_exams'
+  | 'earn_xp'
+  | 'study_days';
+
+export interface StudyQuest {
+  id: string;
+  type: QuestType;
+  code: string;
+  title: string;
+  description?: string;
+  metric: QuestMetric;
+  targetValue: number;
+  rewardXp: number;
+  rewardPoints: number;
+  startsAt: Date;
+  endsAt: Date;
+  isActive: boolean;
+  createdBy?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface StudyUserQuestProgress {
+  id: string;
+  userId: string;
+  questId: string;
+  currentValue: number;
+  completedAt?: Date;
+  claimedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }

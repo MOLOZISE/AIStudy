@@ -14,6 +14,15 @@ import {
   studyWrongNotes,
 } from '@repo/db';
 import { protectedProcedure, router } from '../../trpc.js';
+import { awardStudyReward, updateStudyStreak, getMyProgress, listRecentRewardEvents } from '../../gamification.js';
+import {
+  updateQuestProgressFromRewardEvent,
+  claimQuestRewardInternal,
+  getTodayQuests,
+  getWeeklyQuests,
+  getMonthlyQuests,
+  getQuestSummary,
+} from '../../quests.js';
 
 function normalizeAnswer(value: string): string {
   return value.trim().replace(/\s+/g, '').toLowerCase();
@@ -74,6 +83,7 @@ async function createWrongNote(input: {
       attemptId: input.attemptId,
       status: 'open',
       wrongCount: 1,
+      reviewCount: 0,
       lastWrongAt: new Date(),
       updatedAt: new Date(),
     })
@@ -83,7 +93,9 @@ async function createWrongNote(input: {
         attemptId: input.attemptId,
         status: 'open',
         wrongCount: sql`${studyWrongNotes.wrongCount} + 1`,
+        reviewCount: sql`${studyWrongNotes.reviewCount} + 1`,
         lastWrongAt: new Date(),
+        lastReviewedAt: new Date(),
         updatedAt: new Date(),
       },
     });
@@ -257,6 +269,35 @@ export const studyRouter = router({
         await createWrongNote({ userId: ctx.userId, workbookId: question.workbookId, questionId: question.id, attemptId: attempt.id });
       }
 
+      // Award gamification rewards (non-blocking)
+      await awardStudyReward({
+        userId: ctx.userId,
+        eventType: 'question_attempt',
+        sourceType: 'attempt',
+        sourceId: attempt.id,
+        reason: 'Question attempt submission',
+        idempotencyKey: `question_attempt:${ctx.userId}:${attempt.id}`,
+      });
+
+      if (isCorrect) {
+        await awardStudyReward({
+          userId: ctx.userId,
+          eventType: 'question_correct_bonus',
+          sourceType: 'attempt',
+          sourceId: attempt.id,
+          reason: 'Correct answer bonus',
+          idempotencyKey: `question_correct:${ctx.userId}:${attempt.id}`,
+        });
+      }
+
+      await updateStudyStreak(ctx.userId);
+
+      // Update quest progress
+      await updateQuestProgressFromRewardEvent(ctx.userId, 'question_attempt', 5);
+      if (isCorrect) {
+        await updateQuestProgressFromRewardEvent(ctx.userId, 'question_correct_bonus', 2);
+      }
+
       return {
         attemptId: attempt.id,
         isCorrect,
@@ -292,11 +333,58 @@ export const studyRouter = router({
         })
         .where(eq(studyAttempts.id, input.attemptId));
 
-      if (!isCorrect) {
+      let event: string | null = null;
+
+      if (input.selfReview === '알고있음') {
+        // Mark as mastered
+        await db
+          .update(studyWrongNotes)
+          .set({
+            status: 'mastered',
+            masteredAt: new Date(),
+            reviewCount: sql`${studyWrongNotes.reviewCount} + 1`,
+            lastReviewedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(and(eq(studyWrongNotes.userId, ctx.userId), eq(studyWrongNotes.questionId, attempt.questionId)));
+        event = 'wrong_note_review_success';
+
+        // Award reward (non-blocking)
+        await awardStudyReward({
+          userId: ctx.userId,
+          eventType: 'wrong_note_review_success',
+          sourceType: 'self_review',
+          sourceId: attempt.id,
+          reason: 'Self-review mastery confirmation',
+          idempotencyKey: `wrong_note_review_success:${ctx.userId}:${attempt.questionId}:${attempt.id}`,
+        });
+      } else if (input.selfReview === '부분이해') {
+        // Create/update as reviewing
         await createWrongNote({ userId: ctx.userId, workbookId: attempt.workbookId, questionId: attempt.questionId, attemptId: attempt.id });
+        await db
+          .update(studyWrongNotes)
+          .set({
+            status: 'reviewing',
+            lastReviewedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(and(eq(studyWrongNotes.userId, ctx.userId), eq(studyWrongNotes.questionId, attempt.questionId)));
+        event = 'wrong_note_review_failed';
+      } else {
+        // '모름' - create as open
+        await createWrongNote({ userId: ctx.userId, workbookId: attempt.workbookId, questionId: attempt.questionId, attemptId: attempt.id });
+        event = 'wrong_note_review_failed';
       }
 
-      return { selfReview: input.selfReview, isCorrect };
+      // Update streak after self review
+      await updateStudyStreak(ctx.userId);
+
+      // Update quest progress
+      if (input.selfReview === '알고있음') {
+        await updateQuestProgressFromRewardEvent(ctx.userId, 'wrong_note_review_success', 8);
+      }
+
+      return { selfReview: input.selfReview, isCorrect, event };
     }),
 
   listExamSets: protectedProcedure
@@ -439,6 +527,24 @@ export const studyRouter = router({
       }
 
       const correctCount = results.filter((result) => result.isCorrect).length;
+
+      // Award exam completion reward (non-blocking)
+      const now = new Date().toISOString();
+      await awardStudyReward({
+        userId: ctx.userId,
+        eventType: 'exam_completed',
+        sourceType: 'exam_set',
+        sourceId: input.setId,
+        reason: `Exam completed: ${correctCount}/${results.length} correct`,
+        idempotencyKey: `exam_completed:${ctx.userId}:${input.setId}:${now}`,
+      });
+
+      // Update streak after exam submission
+      await updateStudyStreak(ctx.userId);
+
+      // Update quest progress
+      await updateQuestProgressFromRewardEvent(ctx.userId, 'exam_completed', 30);
+
       return {
         setId: input.setId,
         totalQuestions: results.length,
@@ -450,8 +556,20 @@ export const studyRouter = router({
     }),
 
   listWrongNotes: protectedProcedure
-    .input(z.object({ limit: z.number().min(1).max(50).default(20) }).default({ limit: 20 }))
+    .input(z.object({
+      limit: z.number().min(1).max(100).default(50),
+      status: z.enum(['all', 'open', 'reviewing', 'mastered', 'ignored']).default('all'),
+    }).default({ limit: 50, status: 'all' }))
     .query(async ({ input, ctx }) => {
+      const conditions = [eq(studyWrongNotes.userId, ctx.userId)];
+      if (input.status !== 'all') {
+        if (input.status === 'mastered') {
+          conditions.push(inArray(studyWrongNotes.status, ['mastered', 'resolved']));
+        } else {
+          conditions.push(eq(studyWrongNotes.status, input.status));
+        }
+      }
+
       const items = await db
         .select({
           id: studyWrongNotes.id,
@@ -459,13 +577,17 @@ export const studyRouter = router({
           workbookId: studyWrongNotes.workbookId,
           status: studyWrongNotes.status,
           wrongCount: studyWrongNotes.wrongCount,
+          reviewCount: studyWrongNotes.reviewCount,
           lastWrongAt: studyWrongNotes.lastWrongAt,
+          masteredAt: studyWrongNotes.masteredAt,
           prompt: sql<string>`left(${studyQuestions.prompt}, 180)`,
           questionNo: studyQuestions.questionNo,
+          questionType: studyQuestions.type,
+          difficulty: studyQuestions.difficulty,
         })
         .from(studyWrongNotes)
         .innerJoin(studyQuestions, eq(studyWrongNotes.questionId, studyQuestions.id))
-        .where(eq(studyWrongNotes.userId, ctx.userId))
+        .where(and(...conditions))
         .orderBy(desc(studyWrongNotes.lastWrongAt))
         .limit(input.limit);
 
@@ -555,7 +677,7 @@ export const studyRouter = router({
         .innerJoin(studyQuestions, eq(studyWrongNotes.questionId, studyQuestions.id))
         .where(and(
           eq(studyWrongNotes.userId, ctx.userId),
-          eq(studyWrongNotes.status, 'open'),
+          inArray(studyWrongNotes.status, ['open', 'reviewing']),
           eq(studyQuestions.isActive, true),
           eq(studyQuestions.isHidden, false),
         ))
@@ -621,11 +743,28 @@ export const studyRouter = router({
           .returning({ id: studyAttempts.id });
 
         if (isCorrect) {
-          // 맞췄으면 오답노트 resolved 처리
+          // 맞췄으면 오답노트 mastered 처리
           await db
             .update(studyWrongNotes)
-            .set({ status: 'resolved', resolvedAt: new Date(), updatedAt: new Date() })
+            .set({
+              status: 'mastered',
+              masteredAt: new Date(),
+              resolvedAt: new Date(),
+              reviewCount: sql`${studyWrongNotes.reviewCount} + 1`,
+              lastReviewedAt: new Date(),
+              updatedAt: new Date(),
+            })
             .where(and(eq(studyWrongNotes.userId, ctx.userId), eq(studyWrongNotes.questionId, questionId)));
+
+          // Award wrong note review success reward (non-blocking)
+          await awardStudyReward({
+            userId: ctx.userId,
+            eventType: 'wrong_note_review_success',
+            sourceType: 'wrong_note_exam',
+            sourceId: questionId,
+            reason: 'Successful wrong note review',
+            idempotencyKey: `wrong_note_review_success:${ctx.userId}:${questionId}:${attempt.id}`,
+          });
         } else if (normalizedType !== 'essay_self_review') {
           await createWrongNote({ userId: ctx.userId, workbookId: question.workbookId, questionId, attemptId: attempt.id });
         }
@@ -641,6 +780,16 @@ export const studyRouter = router({
       }
 
       const correctCount = results.filter((r) => r.isCorrect).length;
+
+      // Update streak after wrong note exam session
+      await updateStudyStreak(ctx.userId);
+
+      // Update quest progress
+      const correctCount2 = results.filter((r) => r.isCorrect).length;
+      if (correctCount2 > 0) {
+        await updateQuestProgressFromRewardEvent(ctx.userId, 'wrong_note_review_success', 8 * correctCount2);
+      }
+
       return {
         totalQuestions: results.length,
         correctCount,
@@ -649,6 +798,80 @@ export const studyRouter = router({
         resolvedCount: correctCount,
         results,
       };
+    }),
+
+  getWrongNoteStats: protectedProcedure
+    .query(async ({ ctx }) => {
+      const [counts] = await db
+        .select({
+          openCount: sql<number>`count(*) filter (where status = 'open')::int`,
+          reviewingCount: sql<number>`count(*) filter (where status = 'reviewing')::int`,
+          masteredCount: sql<number>`count(*) filter (where status in ('mastered', 'resolved'))::int`,
+          ignoredCount: sql<number>`count(*) filter (where status = 'ignored')::int`,
+          recentCount: sql<number>`count(*) filter (where last_wrong_at >= now() - interval '7 days')::int`,
+        })
+        .from(studyWrongNotes)
+        .where(eq(studyWrongNotes.userId, ctx.userId));
+
+      return counts || { openCount: 0, reviewingCount: 0, masteredCount: 0, ignoredCount: 0, recentCount: 0 };
+    }),
+
+  updateWrongNoteStatus: protectedProcedure
+    .input(
+      z.object({
+        noteId: z.string().uuid(),
+        status: z.enum(['open', 'reviewing', 'mastered', 'ignored']),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const [note] = await db
+        .select()
+        .from(studyWrongNotes)
+        .where(and(eq(studyWrongNotes.id, input.noteId), eq(studyWrongNotes.userId, ctx.userId)))
+        .limit(1);
+
+      if (!note) throw new TRPCError({ code: 'NOT_FOUND', message: '오답노트를 찾을 수 없습니다.' });
+
+      const updateData: Record<string, any> = {
+        status: input.status,
+        updatedAt: new Date(),
+      };
+
+      if (input.status === 'mastered' && !note.masteredAt) {
+        updateData.masteredAt = new Date();
+      }
+      if (input.status === 'ignored' && !note.ignoredAt) {
+        updateData.ignoredAt = new Date();
+      }
+      if (input.status === 'reviewing' && !note.lastReviewedAt) {
+        updateData.lastReviewedAt = new Date();
+      }
+
+      await db
+        .update(studyWrongNotes)
+        .set(updateData)
+        .where(eq(studyWrongNotes.id, input.noteId));
+
+      let event: string | null = null;
+      if (input.status === 'mastered') {
+        event = 'wrong_note_marked_mastered';
+        // Award reward only if this is the first time mastering (check masteredAt was just set)
+        if (!note.masteredAt) {
+          await awardStudyReward({
+            userId: ctx.userId,
+            eventType: 'wrong_note_marked_mastered',
+            sourceType: 'wrong_note',
+            sourceId: input.noteId,
+            reason: 'Manual mastery mark',
+            idempotencyKey: `wrong_note_marked_mastered:${input.noteId}`,
+          });
+        }
+      }
+      if (input.status === 'ignored') {
+        event = 'wrong_note_marked_ignored';
+      }
+
+      return { status: input.status, event };
     }),
 
   // ── 개념 ───────────────────────────────────────────────────────────────────
@@ -971,5 +1194,73 @@ export const studyRouter = router({
           accuracy: r.total > 0 ? Math.round((r.correct / r.total) * 100) : 0,
         })),
       };
+    }),
+
+  // ── 게임화 (Gamification) ──────────────────────────────────────────────────
+
+  getMyProgress: protectedProcedure
+    .query(async ({ ctx }) => {
+      return await getMyProgress(ctx.userId);
+    }),
+
+  listRecentRewardEvents: protectedProcedure
+    .input(z.object({ limit: z.number().min(1).max(50).default(10) }).default({}))
+    .query(async ({ input, ctx }) => {
+      const events = await listRecentRewardEvents(ctx.userId, input.limit);
+      return { events };
+    }),
+
+  getGrowthSummary: protectedProcedure
+    .query(async ({ ctx }) => {
+      const progress = await getMyProgress(ctx.userId);
+      const recentEvents = await listRecentRewardEvents(ctx.userId, 5);
+
+      return {
+        level: progress?.level ?? 1,
+        totalXp: progress?.totalXp ?? 0,
+        totalPoints: progress?.totalPoints ?? 0,
+        currentStreak: progress?.currentStreak ?? 0,
+        longestStreak: progress?.longestStreak ?? 0,
+        nextLevelProgress: progress?.progress ?? 0,
+        recentEvents,
+      };
+    }),
+
+  // ── 퀘스트 (Quests) ─────────────────────────────────────────────────────────
+
+  getTodayQuests: protectedProcedure
+    .query(async ({ ctx }) => {
+      const quests = await getTodayQuests(ctx.userId);
+      return { quests };
+    }),
+
+  getWeeklyQuests: protectedProcedure
+    .query(async ({ ctx }) => {
+      const quests = await getWeeklyQuests(ctx.userId);
+      return { quests };
+    }),
+
+  getMonthlyQuests: protectedProcedure
+    .query(async ({ ctx }) => {
+      const quests = await getMonthlyQuests(ctx.userId);
+      return { quests };
+    }),
+
+  getQuestSummary: protectedProcedure
+    .query(async ({ ctx }) => {
+      return await getQuestSummary(ctx.userId);
+    }),
+
+  claimQuestReward: protectedProcedure
+    .input(z.object({ questId: z.string().uuid() }))
+    .mutation(async ({ input, ctx }) => {
+      const success = await claimQuestRewardInternal(ctx.userId, input.questId);
+      if (!success) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: '퀘스트 보상을 받을 수 없습니다. 완료되지 않았거나 이미 받은 퀘스트입니다.',
+        });
+      }
+      return { success: true };
     }),
 });
