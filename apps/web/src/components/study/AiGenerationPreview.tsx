@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { utils, write } from 'xlsx';
 import { trpc } from '@/lib/trpc';
 import { validateAiDraft, normalizeDraftForExport } from '@/lib/study/draftValidation';
+import { checkAiQuality } from '@/lib/study/aiQualityChecks';
 import type { AiGeneratedWorkbookDraft, StudyAiGenerationJob } from '@repo/types';
 
 interface AiGenerationPreviewProps {
@@ -85,6 +86,7 @@ export function AiGenerationPreview({ job, preview }: AiGenerationPreviewProps) 
 
   const draft = draftData;
   const validation = validateAiDraft(draft);
+  const qualityCheck = checkAiQuality(draft);
   const allQuestionIds = draft.questions?.map(q => q.externalId) ?? [];
   const selected = selectedQuestionIds ?? new Set(allQuestionIds);
   const selectedCount = Array.from(selected).filter(id => selected.has(id)).length;
@@ -237,6 +239,54 @@ export function AiGenerationPreview({ job, preview }: AiGenerationPreviewProps) 
         </div>
       )}
 
+      {/* Quality Score */}
+      <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-3">
+        <div className="flex items-start justify-between">
+          <h4 className="text-sm font-semibold text-slate-900">품질 점수</h4>
+          <div className="text-right">
+            <div className="text-2xl font-bold text-slate-900">{qualityCheck.qualityScore}</div>
+            <div className="text-xs text-slate-500">/ 100</div>
+          </div>
+        </div>
+
+        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+          <div
+            className={`h-full transition-all ${
+              qualityCheck.qualityGrade === 'excellent'
+                ? 'bg-emerald-500'
+                : qualityCheck.qualityGrade === 'good'
+                  ? 'bg-blue-500'
+                  : qualityCheck.qualityGrade === 'fair'
+                    ? 'bg-amber-500'
+                    : 'bg-red-500'
+            }`}
+            style={{ width: `${qualityCheck.qualityScore}%` }}
+          />
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 text-center text-xs">
+          <div className="rounded bg-red-50 p-2">
+            <p className="font-semibold text-red-900">{qualityCheck.errorCount}</p>
+            <p className="text-red-700">오류</p>
+          </div>
+          <div className="rounded bg-amber-50 p-2">
+            <p className="font-semibold text-amber-900">{qualityCheck.warningCount}</p>
+            <p className="text-amber-700">경고</p>
+          </div>
+          <div className="rounded bg-blue-50 p-2">
+            <p className="font-semibold text-blue-900">{qualityCheck.infoCount}</p>
+            <p className="text-blue-700">정보</p>
+          </div>
+        </div>
+
+        <p className="text-xs text-slate-600">
+          {qualityCheck.qualityGrade === 'excellent' && '✓ 우수한 품질입니다.'}
+          {qualityCheck.qualityGrade === 'good' && '△ 양호하나 검토 권장됩니다.'}
+          {qualityCheck.qualityGrade === 'fair' && '⚠️ 주의해서 검수해주세요.'}
+          {qualityCheck.qualityGrade === 'poor' && '✗ 심각한 오류가 있습니다. 저장 전 수정 필수입니다.'}
+        </p>
+      </div>
+
       {/* Warning */}
       <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
         <p className="text-xs text-amber-900">
@@ -254,6 +304,29 @@ export function AiGenerationPreview({ job, preview }: AiGenerationPreviewProps) 
                 <strong>{err.field}:</strong> {err.message}
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* QC Issues */}
+      {qualityCheck.issues.length > 0 && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 space-y-2">
+          <p className="text-sm font-semibold text-slate-900">품질 검사 결과</p>
+          <div className="space-y-1 max-h-48 overflow-y-auto">
+            {qualityCheck.issues.map((issue, idx) => {
+              const colorClass =
+                issue.severity === 'error'
+                  ? 'text-red-700'
+                  : issue.severity === 'warning'
+                    ? 'text-amber-700'
+                    : 'text-blue-700';
+              return (
+                <div key={idx} className={`text-xs ${colorClass}`}>
+                  <strong>[{issue.code}]</strong> {issue.message}
+                  {issue.questionId && <span className="ml-1 opacity-70">({issue.questionId})</span>}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -370,16 +443,18 @@ export function AiGenerationPreview({ job, preview }: AiGenerationPreviewProps) 
           <div className="grid grid-cols-2 gap-3 border-t border-slate-200 pt-4">
             <button
               onClick={downloadExcel}
-              disabled={validation.errors.some(e => e.type === 'error')}
+              disabled={validation.errors.some(e => e.type === 'error') || qualityCheck.errorCount > 0}
               className="rounded-lg bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:bg-slate-300 transition-colors"
+              title={qualityCheck.errorCount > 0 ? '품질 오류를 먼저 해결해주세요.' : ''}
             >
               📥 Excel 다운로드
             </button>
 
             <button
               onClick={handleDirectApply}
-              disabled={isApplying || validation.errors.some(e => e.type === 'error') || selectedCount === 0}
+              disabled={isApplying || validation.errors.some(e => e.type === 'error') || qualityCheck.errorCount > 0 || selectedCount === 0}
               className="rounded-lg bg-emerald-600 px-4 py-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:bg-slate-300 transition-colors"
+              title={qualityCheck.errorCount > 0 ? '품질 오류를 먼저 해결해주세요.' : selectedCount === 0 ? '저장할 문제를 선택해주세요.' : ''}
             >
               {isApplying ? '저장 중...' : '📚 저장하기'}
             </button>

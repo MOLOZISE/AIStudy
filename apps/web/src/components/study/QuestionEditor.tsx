@@ -13,6 +13,7 @@ export function QuestionEditor({ questionId, onClose, onSaveSuccess }: QuestionE
   const question = trpc.study.getQuestion.useQuery({ questionId });
   const updateQuestion = trpc.study.updateQuestion.useMutation();
   const hideQuestion = trpc.study.hideQuestion.useMutation();
+  const updateReviewStatus = trpc.study.updateQuestionReviewStatus.useMutation();
 
   const [isSaving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -99,6 +100,21 @@ export function QuestionEditor({ questionId, onClose, onSaveSuccess }: QuestionE
     }
   }
 
+  async function handleReviewStatusChange(status: 'approved' | 'needs_fix' | 'rejected' | 'draft') {
+    setSaving(true);
+    try {
+      await updateReviewStatus.mutateAsync({ questionId, status });
+      setSuccessMessage(`상태가 변경되었습니다. (${status})`);
+      setTimeout(() => {
+        onSaveSuccess();
+      }, 800);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : '상태 변경 중 오류가 발생했습니다.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (question.isLoading) {
     return <div className="text-sm text-slate-500">로딩 중...</div>;
   }
@@ -113,7 +129,25 @@ export function QuestionEditor({ questionId, onClose, onSaveSuccess }: QuestionE
 
   return (
     <form onSubmit={handleSave} className="space-y-4">
-      <h2 className="text-sm font-semibold text-slate-900">문제 편집</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-slate-900">문제 편집</h2>
+        {question.data && (
+          <span className={`rounded-full px-2 py-1 text-xs font-semibold ${
+            question.data.reviewStatus === 'approved'
+              ? 'bg-emerald-100 text-emerald-700'
+              : question.data.reviewStatus === 'needs_fix'
+                ? 'bg-amber-100 text-amber-700'
+                : question.data.reviewStatus === 'rejected'
+                  ? 'bg-red-100 text-red-700'
+                  : 'bg-slate-100 text-slate-700'
+          }`}>
+            {question.data.reviewStatus === 'approved' && '✓ 승인됨'}
+            {question.data.reviewStatus === 'needs_fix' && '⚠️ 검토 필요'}
+            {question.data.reviewStatus === 'rejected' && '✗ 반려됨'}
+            {question.data.reviewStatus === 'draft' && '📝 검수 중'}
+          </span>
+        )}
+      </div>
 
       {/* Error/Success Messages */}
       {errorMessage && (
@@ -219,6 +253,39 @@ export function QuestionEditor({ questionId, onClose, onSaveSuccess }: QuestionE
           ))}
         </div>
       </div>
+
+      {/* Review Status Actions */}
+      {question.data && question.data.reviewStatus === 'draft' && (
+        <div className="border-t border-slate-200 pt-4">
+          <p className="mb-2 text-xs font-semibold text-slate-700">검수 상태</p>
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={() => handleReviewStatusChange('approved')}
+              disabled={isSaving}
+              className="rounded-md bg-emerald-600 px-3 py-2 text-xs font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-300 hover:bg-emerald-700"
+            >
+              ✓ 승인
+            </button>
+            <button
+              type="button"
+              onClick={() => handleReviewStatusChange('needs_fix')}
+              disabled={isSaving}
+              className="rounded-md bg-amber-600 px-3 py-2 text-xs font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-300 hover:bg-amber-700"
+            >
+              ⚠️ 수정필요
+            </button>
+            <button
+              type="button"
+              onClick={() => handleReviewStatusChange('rejected')}
+              disabled={isSaving}
+              className="rounded-md bg-red-600 px-3 py-2 text-xs font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-300 hover:bg-red-700"
+            >
+              ✗ 반려
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Actions */}
       <div className="flex gap-2 border-t border-slate-200 pt-4">

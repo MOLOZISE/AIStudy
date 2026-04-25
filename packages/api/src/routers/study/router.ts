@@ -219,6 +219,7 @@ export const studyRouter = router({
           explanation: studyQuestions.explanation,
           difficulty: studyQuestions.difficulty,
           sourceSheet: studyQuestions.sourceSheet,
+          reviewStatus: studyQuestions.reviewStatus,
         })
         .from(studyQuestions)
         .where(and(eq(studyQuestions.id, input.questionId), eq(studyQuestions.isActive, true), eq(studyQuestions.isHidden, false)))
@@ -3109,5 +3110,35 @@ export const studyRouter = router({
           message: `문제은행 생성 실패: ${error.message}`,
         });
       }
+    }),
+
+  updateQuestionReviewStatus: protectedProcedure
+    .input(z.object({
+      questionId: z.string().uuid(),
+      status: z.enum(['approved', 'needs_fix', 'rejected', 'draft']),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const question = await db.query.studyQuestions.findFirst({
+        where: eq(studyQuestions.id, input.questionId),
+      });
+
+      if (!question) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: '문제를 찾을 수 없습니다.' });
+      }
+
+      const workbook = await db.query.studyWorkbooks.findFirst({
+        where: eq(studyWorkbooks.id, question.workbookId),
+      });
+
+      if (!workbook || workbook.uploadedBy !== ctx.userId) {
+        throw new TRPCError({ code: 'FORBIDDEN', message: '이 문제를 수정할 권한이 없습니다.' });
+      }
+
+      await db
+        .update(studyQuestions)
+        .set({ reviewStatus: input.status })
+        .where(eq(studyQuestions.id, input.questionId));
+
+      return { success: true };
     }),
 });

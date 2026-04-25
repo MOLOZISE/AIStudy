@@ -38,7 +38,15 @@ export function WorkbookDetail({ workbookId }: { workbookId: string }) {
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="truncate text-lg font-bold text-slate-950">{workbook.data.originalFilename}</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="truncate text-lg font-bold text-slate-950">{workbook.data.originalFilename}</p>
+              {(workbook.data.metadata as any)?.aiGenerated && (
+                <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-semibold text-purple-700">🤖 AI 생성</span>
+              )}
+              {(workbook.data.metadata as any)?.needsReview && (
+                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">📋 검수 필요</span>
+              )}
+            </div>
             {workbook.data.subjectName && (
               <p className="mt-1 text-xs font-medium text-blue-600">{workbook.data.subjectName}</p>
             )}
