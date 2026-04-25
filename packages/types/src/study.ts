@@ -304,3 +304,64 @@ export interface StudyCommentWithAuthor extends StudyComment {
   isLiked?: boolean;
   replies?: StudyCommentWithAuthor[];
 }
+
+export type AiGenerationJobStatus = 'pending' | 'extracting' | 'generating' | 'ready' | 'failed' | 'cancelled';
+
+export interface StudyAiGenerationJob {
+  id: string;
+  userId: string;
+  sourceType: string;
+  sourceFilePath: string | null;
+  sourceFileName: string | null;
+  sourceFileSize: number | null;
+  status: AiGenerationJobStatus;
+  progress: number | null;
+  extractedTextPreview: string | null;
+  resultPayload: Record<string, unknown> | null;
+  errorPayload: Record<string, unknown> | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface AiGeneratedWorkbookDraft {
+  workbook: {
+    title: string;
+    description?: string;
+    category?: string;
+    difficulty?: string;
+  };
+  concepts: Array<{
+    externalId: string;
+    title: string;
+    description?: string;
+    orderIndex: number;
+  }>;
+  seeds: Array<{
+    externalId: string;
+    conceptExternalId?: string;
+    title?: string;
+    content?: string;
+  }>;
+  questions: Array<{
+    externalId: string;
+    conceptExternalId?: string;
+    seedExternalId?: string;
+    questionNo?: string;
+    type: StudyQuestionType;
+    prompt: string;
+    choices: string[];
+    answer: string;
+    explanation?: string;
+    difficulty?: string;
+  }>;
+  examSets?: Array<{
+    externalId: string;
+    title: string;
+    description?: string;
+    items: Array<{
+      externalQuestionId: string;
+      position: number;
+      points?: string;
+    }>;
+  }>;
+}

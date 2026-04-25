@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 
 const navItems = [
   { href: '/study', label: '홈' },
+  { href: '/study/generate', label: '🤖 AI' },
   { href: '/study/templates', label: '템플릿' },
   { href: '/study/library', label: '문제집' },
   { href: '/study/practice', label: '연습' },

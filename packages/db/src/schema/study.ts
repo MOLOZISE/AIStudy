@@ -745,4 +745,29 @@ export const studyCommentLikesRelations = relations(studyCommentLikes, ({ one })
   }),
 }));
 
+export const studyAiGenerationJobs = pgTable(
+  'study_ai_generation_jobs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull(),
+    sourceType: varchar('source_type', { length: 40 }).notNull().default('pdf'),
+    sourceFilePath: text('source_file_path'),
+    sourceFileName: varchar('source_file_name', { length: 500 }),
+    sourceFileSize: integer('source_file_size'),
+    status: varchar('status', { length: 40 }).notNull().default('pending'),
+    progress: integer('progress').default(0),
+    extractedTextPreview: text('extracted_text_preview'),
+    resultPayload: jsonb('result_payload').$type<Record<string, unknown>>(),
+    errorPayload: jsonb('error_payload').$type<Record<string, unknown>>(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => ({
+    userIdIdx: index('idx_study_ai_generation_jobs_user_id').on(table.userId),
+    statusIdx: index('idx_study_ai_generation_jobs_status').on(table.status),
+  })
+);
+
+export const studyAiGenerationJobsRelations = relations(studyAiGenerationJobs, () => ({}));
+
 export const studyQuestionVisibilityCheck = sql`study_questions.is_active = true AND study_questions.is_hidden = false`;

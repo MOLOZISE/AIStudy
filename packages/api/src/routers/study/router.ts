@@ -24,6 +24,7 @@ import {
   studyWorkbookLikes,
   studyReports,
   studyWorkbookForks,
+  studyAiGenerationJobs,
 } from '@repo/db';
 import { protectedProcedure, router } from '../../trpc.js';
 import { awardStudyReward, updateStudyStreak, getMyProgress, listRecentRewardEvents } from '../../gamification.js';
@@ -2786,5 +2787,135 @@ export const studyRouter = router({
         items: reports,
         total: total[0]?.count ?? 0,
       };
+    }),
+
+  createAiGenerationJob: protectedProcedure
+    .input(z.object({
+      jobId: z.string().uuid(),
+      fileName: z.string(),
+      fileSize: z.number().int().positive(),
+      extractedText: z.string(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const job = await db.insert(studyAiGenerationJobs).values({
+        id: input.jobId,
+        userId: ctx.userId,
+        sourceType: 'pdf',
+        sourceFileName: input.fileName,
+        sourceFileSize: input.fileSize,
+        status: 'extracting',
+        progress: 0,
+        extractedTextPreview: input.extractedText.substring(0, 500),
+      }).returning();
+
+      return job[0];
+    }),
+
+  getAiGenerationJob: protectedProcedure
+    .input(z.object({ jobId: z.string().uuid() }))
+    .query(async ({ input, ctx }) => {
+      const job = await db.query.studyAiGenerationJobs.findFirst({
+        where: and(
+          eq(studyAiGenerationJobs.id, input.jobId),
+          eq(studyAiGenerationJobs.userId, ctx.userId)
+        ),
+      });
+
+      if (!job) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'AI generation job을 찾을 수 없습니다.' });
+      }
+
+      return job;
+    }),
+
+  listMyAiGenerationJobs: protectedProcedure
+    .input(z.object({
+      limit: z.number().int().min(1).max(100).default(20),
+      offset: z.number().int().min(0).default(0),
+    }))
+    .query(async ({ input, ctx }) => {
+      const jobs = await db.select()
+        .from(studyAiGenerationJobs)
+        .where(eq(studyAiGenerationJobs.userId, ctx.userId))
+        .orderBy(desc(studyAiGenerationJobs.createdAt))
+        .limit(input.limit)
+        .offset(input.offset);
+
+      const total = await db.select({ count: count() })
+        .from(studyAiGenerationJobs)
+        .where(eq(studyAiGenerationJobs.userId, ctx.userId));
+
+      return {
+        items: jobs,
+        total: total[0]?.count ?? 0,
+      };
+    }),
+
+  getGeneratedWorkbookPreview: protectedProcedure
+    .input(z.object({ jobId: z.string().uuid() }))
+    .query(async ({ input, ctx }) => {
+      const job = await db.query.studyAiGenerationJobs.findFirst({
+        where: and(
+          eq(studyAiGenerationJobs.id, input.jobId),
+          eq(studyAiGenerationJobs.userId, ctx.userId)
+        ),
+      });
+
+      if (!job) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'AI generation job을 찾을 수 없습니다.' });
+      }
+
+      if (job.status === 'pending' || job.status === 'extracting' || job.status === 'generating') {
+        return {
+          status: job.status,
+          progress: job.progress,
+          payload: null,
+        };
+      }
+
+      if (job.status === 'failed') {
+        return {
+          status: 'failed',
+          progress: job.progress,
+          error: job.errorPayload,
+          payload: null,
+        };
+      }
+
+      return {
+        status: job.status,
+        progress: 100,
+        payload: job.resultPayload,
+      };
+    }),
+
+  updateAiGenerationJobStatus: protectedProcedure
+    .input(z.object({
+      jobId: z.string().uuid(),
+      status: z.enum(['pending', 'extracting', 'generating', 'ready', 'failed', 'cancelled']),
+      progress: z.number().int().min(0).max(100),
+      resultPayload: z.record(z.unknown()).optional(),
+      errorPayload: z.record(z.unknown()).optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const job = await db.query.studyAiGenerationJobs.findFirst({
+        where: eq(studyAiGenerationJobs.id, input.jobId),
+      });
+
+      if (!job || job.userId !== ctx.userId) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: 'AI generation job을 찾을 수 없습니다.' });
+      }
+
+      const updated = await db.update(studyAiGenerationJobs)
+        .set({
+          status: input.status,
+          progress: input.progress,
+          resultPayload: input.resultPayload,
+          errorPayload: input.errorPayload,
+        })
+        .where(eq(studyAiGenerationJobs.id, input.jobId))
+        .returning();
+
+      return updated[0];
     }),
 });
