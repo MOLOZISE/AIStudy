@@ -281,3 +281,26 @@ export interface WorkbookSourceAttribution {
   sourceDifficulty?: string;
   forkedAt: Date;
 }
+
+export type CommentStatus = 'active' | 'hidden' | 'deleted' | 'reported';
+export type CommentTargetType = 'publication' | 'question';
+
+export interface StudyComment {
+  id: string;
+  targetType: CommentTargetType;
+  targetId: string;
+  authorId: string;
+  body: string;
+  parentCommentId?: string;
+  status: CommentStatus;
+  likeCount: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface StudyCommentWithAuthor extends StudyComment {
+  authorDisplayName: string;
+  isAuthor?: boolean;
+  isLiked?: boolean;
+  replies?: StudyCommentWithAuthor[];
+}

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { trpc } from '@/lib/trpc';
+import { CommentThread } from './CommentThread';
 
 export function PublicWorkbookDetail({ publicationId }: { publicationId: string }) {
   const router = useRouter();
@@ -308,6 +309,12 @@ export function PublicWorkbookDetail({ publicationId }: { publicationId: string 
             <p className="text-center text-sm text-slate-500 py-4">아직 리뷰가 없습니다.</p>
           )}
         </div>
+      </section>
+
+      {/* Comments Section */}
+      <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-lg font-bold text-slate-900 mb-4">댓글</h2>
+        <CommentThread targetType="publication" targetId={publication.id} />
       </section>
     </div>
   );

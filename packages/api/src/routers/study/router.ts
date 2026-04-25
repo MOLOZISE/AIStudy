@@ -5,6 +5,8 @@ import {
   db,
   profiles,
   studyAttempts,
+  studyComments,
+  studyCommentLikes,
   studyConcepts,
   studyExamSetItems,
   studyExamSets,
@@ -2417,5 +2419,372 @@ export const studyRouter = router({
         .limit(input.limit);
 
       return { items };
+    }),
+
+  // ──────────────────────────────────────────────────────────────────────
+  // P12: Discussion, Comments, and Moderation
+  // ──────────────────────────────────────────────────────────────────────
+
+  createComment: protectedProcedure
+    .input(
+      z.object({
+        targetType: z.enum(['publication', 'question']),
+        targetId: z.string().uuid(),
+        body: z.string().min(1).max(2000),
+        parentCommentId: z.string().uuid().optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      // Validate publication is public/published
+      if (input.targetType === 'publication') {
+        const [pub] = await db
+          .select()
+          .from(studyWorkbookPublications)
+          .where(
+            and(
+              eq(studyWorkbookPublications.id, input.targetId),
+              eq(studyWorkbookPublications.visibility, 'public'),
+              eq(studyWorkbookPublications.status, 'published')
+            )
+          )
+          .limit(1);
+
+        if (!pub) {
+          throw new TRPCError({
+            code: 'NOT_FOUND',
+            message: '공개된 문제집을 찾을 수 없습니다.',
+          });
+        }
+      }
+
+      // Validate question exists
+      if (input.targetType === 'question') {
+        const [question] = await db
+          .select()
+          .from(studyQuestions)
+          .where(eq(studyQuestions.id, input.targetId))
+          .limit(1);
+
+        if (!question) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: '문항을 찾을 수 없습니다.' });
+        }
+      }
+
+      // Validate parent comment if provided
+      if (input.parentCommentId) {
+        const [parent] = await db
+          .select()
+          .from(studyComments)
+          .where(eq(studyComments.id, input.parentCommentId))
+          .limit(1);
+
+        if (!parent) {
+          throw new TRPCError({ code: 'NOT_FOUND', message: '댓글을 찾을 수 없습니다.' });
+        }
+
+        // Enforce 1-level nesting: parent's parent must be null
+        if (parent.parentCommentId) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: '대댓글에 대한 댓글은 작성할 수 없습니다.',
+          });
+        }
+      }
+
+      const [comment] = await db
+        .insert(studyComments)
+        .values({
+          targetType: input.targetType,
+          targetId: input.targetId,
+          authorId: ctx.userId,
+          body: input.body,
+          parentCommentId: input.parentCommentId,
+          status: 'active',
+        })
+        .returning();
+
+      // Award XP
+      await awardStudyReward({
+        userId: ctx.userId,
+        eventType: 'comment_created',
+        sourceType: 'study_comment',
+        sourceId: comment.id,
+        idempotencyKey: `comment_created:${comment.id}`,
+      });
+
+      return comment;
+    }),
+
+  listCommentsByTarget: protectedProcedure
+    .input(
+      z.object({
+        targetType: z.enum(['publication', 'question']),
+        targetId: z.string().uuid(),
+        limit: z.number().min(1).max(100).default(50),
+        offset: z.number().min(0).default(0),
+      })
+    )
+    .query(async ({ input, ctx }) => {
+      const comments = await db
+        .select({
+          id: studyComments.id,
+          targetType: studyComments.targetType,
+          targetId: studyComments.targetId,
+          authorId: studyComments.authorId,
+          body: studyComments.body,
+          parentCommentId: studyComments.parentCommentId,
+          status: studyComments.status,
+          likeCount: studyComments.likeCount,
+          createdAt: studyComments.createdAt,
+          updatedAt: studyComments.updatedAt,
+          authorDisplayName: profiles.displayName,
+        })
+        .from(studyComments)
+        .leftJoin(profiles, eq(studyComments.authorId, profiles.id))
+        .where(
+          and(
+            eq(studyComments.targetType, input.targetType),
+            eq(studyComments.targetId, input.targetId)
+          )
+        )
+        .orderBy(asc(studyComments.createdAt))
+        .limit(input.limit)
+        .offset(input.offset);
+
+      // Build nested structure with replies
+      const topLevel = comments.filter((c) => !c.parentCommentId);
+      const replies = comments.filter((c) => c.parentCommentId);
+
+      const topLevelWithReplies = topLevel.map((comment) => ({
+        ...comment,
+        isAuthor: comment.authorId === ctx.userId,
+        replies: replies.filter((r) => r.parentCommentId === comment.id).map((r) => ({
+          ...r,
+          isAuthor: r.authorId === ctx.userId,
+        })),
+      }));
+
+      const total = await db
+        .select({ count: count() })
+        .from(studyComments)
+        .where(
+          and(
+            eq(studyComments.targetType, input.targetType),
+            eq(studyComments.targetId, input.targetId)
+          )
+        );
+
+      return {
+        items: topLevelWithReplies,
+        total: total[0]?.count ?? 0,
+      };
+    }),
+
+  updateMyComment: protectedProcedure
+    .input(z.object({ commentId: z.string().uuid(), body: z.string().min(1).max(2000) }))
+    .mutation(async ({ input, ctx }) => {
+      const [comment] = await db
+        .select()
+        .from(studyComments)
+        .where(eq(studyComments.id, input.commentId))
+        .limit(1);
+
+      if (!comment) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: '댓글을 찾을 수 없습니다.' });
+      }
+
+      if (comment.authorId !== ctx.userId) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: '본인의 댓글만 수정할 수 있습니다.',
+        });
+      }
+
+      if (comment.status !== 'active') {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: '활성 댓글만 수정할 수 있습니다.',
+        });
+      }
+
+      const [updated] = await db
+        .update(studyComments)
+        .set({ body: input.body, updatedAt: new Date() })
+        .where(eq(studyComments.id, input.commentId))
+        .returning();
+
+      return updated;
+    }),
+
+  deleteMyComment: protectedProcedure
+    .input(z.object({ commentId: z.string().uuid() }))
+    .mutation(async ({ input, ctx }) => {
+      const [comment] = await db
+        .select()
+        .from(studyComments)
+        .where(eq(studyComments.id, input.commentId))
+        .limit(1);
+
+      if (!comment) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: '댓글을 찾을 수 없습니다.' });
+      }
+
+      if (comment.authorId !== ctx.userId) {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: '본인의 댓글만 삭제할 수 있습니다.',
+        });
+      }
+
+      await db.update(studyComments).set({ status: 'deleted' }).where(eq(studyComments.id, input.commentId));
+
+      return { deleted: true };
+    }),
+
+  toggleCommentLike: protectedProcedure
+    .input(z.object({ commentId: z.string().uuid() }))
+    .mutation(async ({ input, ctx }) => {
+      const [comment] = await db
+        .select()
+        .from(studyComments)
+        .where(eq(studyComments.id, input.commentId))
+        .limit(1);
+
+      if (!comment) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: '댓글을 찾을 수 없습니다.' });
+      }
+
+      const [existing] = await db
+        .select()
+        .from(studyCommentLikes)
+        .where(and(eq(studyCommentLikes.commentId, input.commentId), eq(studyCommentLikes.userId, ctx.userId)))
+        .limit(1);
+
+      let liked = false;
+      if (existing) {
+        await db
+          .delete(studyCommentLikes)
+          .where(
+            and(
+              eq(studyCommentLikes.commentId, input.commentId),
+              eq(studyCommentLikes.userId, ctx.userId)
+            )
+          );
+
+        await db
+          .update(studyComments)
+          .set({ likeCount: sql`${studyComments.likeCount} - 1` })
+          .where(eq(studyComments.id, input.commentId));
+      } else {
+        await db.insert(studyCommentLikes).values({ commentId: input.commentId, userId: ctx.userId });
+
+        await db
+          .update(studyComments)
+          .set({ likeCount: sql`${studyComments.likeCount} + 1` })
+          .where(eq(studyComments.id, input.commentId));
+
+        liked = true;
+      }
+
+      const [updatedComment] = await db
+        .select({ likeCount: studyComments.likeCount })
+        .from(studyComments)
+        .where(eq(studyComments.id, input.commentId));
+
+      return { liked, likeCount: updatedComment?.likeCount ?? 0 };
+    }),
+
+  reportComment: protectedProcedure
+    .input(z.object({ commentId: z.string().uuid(), reason: z.string().min(1).max(100), detail: z.string().optional() }))
+    .mutation(async ({ input, ctx }) => {
+      const [comment] = await db
+        .select()
+        .from(studyComments)
+        .where(eq(studyComments.id, input.commentId))
+        .limit(1);
+
+      if (!comment) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: '댓글을 찾을 수 없습니다.' });
+      }
+
+      const [report] = await db
+        .insert(studyReports)
+        .values({
+          targetType: 'comment',
+          targetId: input.commentId,
+          reporterId: ctx.userId,
+          reason: input.reason,
+          detail: input.detail,
+          status: 'open',
+        })
+        .returning();
+
+      return { reported: true, reportId: report.id };
+    }),
+
+  reportQuestion: protectedProcedure
+    .input(z.object({ questionId: z.string().uuid(), reason: z.string().min(1).max(100), detail: z.string().optional() }))
+    .mutation(async ({ input, ctx }) => {
+      const [question] = await db
+        .select()
+        .from(studyQuestions)
+        .where(eq(studyQuestions.id, input.questionId))
+        .limit(1);
+
+      if (!question) {
+        throw new TRPCError({ code: 'NOT_FOUND', message: '문항을 찾을 수 없습니다.' });
+      }
+
+      const [report] = await db
+        .insert(studyReports)
+        .values({
+          targetType: 'question',
+          targetId: input.questionId,
+          reporterId: ctx.userId,
+          reason: input.reason,
+          detail: input.detail,
+          status: 'open',
+        })
+        .returning();
+
+      return { reported: true, reportId: report.id };
+    }),
+
+  listReportsForAdmin: protectedProcedure
+    .input(z.object({ limit: z.number().min(1).max(100).default(50), offset: z.number().min(0).default(0) }))
+    .query(async ({ input, ctx }) => {
+      // Check if user is admin
+      const [profile] = await db.select().from(profiles).where(eq(profiles.id, ctx.userId)).limit(1);
+
+      if (!profile || profile.role !== 'admin') {
+        throw new TRPCError({
+          code: 'FORBIDDEN',
+          message: '관리자만 접근할 수 있습니다.',
+        });
+      }
+
+      const reports = await db
+        .select({
+          id: studyReports.id,
+          targetType: studyReports.targetType,
+          targetId: studyReports.targetId,
+          reason: studyReports.reason,
+          detail: studyReports.detail,
+          status: studyReports.status,
+          reporterDisplayName: profiles.displayName,
+          createdAt: studyReports.createdAt,
+        })
+        .from(studyReports)
+        .leftJoin(profiles, eq(studyReports.reporterId, profiles.id))
+        .orderBy(desc(studyReports.createdAt))
+        .limit(input.limit)
+        .offset(input.offset);
+
+      const total = await db.select({ count: count() }).from(studyReports);
+
+      return {
+        items: reports,
+        total: total[0]?.count ?? 0,
+      };
     }),
 });

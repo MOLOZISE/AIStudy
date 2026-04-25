@@ -686,4 +686,63 @@ export const studyWorkbookForksRelations = relations(studyWorkbookForks, ({ one 
   }),
 }));
 
+// ──────────────────────────────────────────────────────────────────────
+// P12: Discussion, Comments, and Moderation
+// ──────────────────────────────────────────────────────────────────────
+
+export const studyComments = pgTable(
+  'study_comments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    targetType: varchar('target_type', { length: 40 }).notNull(), // 'publication' | 'question'
+    targetId: uuid('target_id').notNull(),
+    authorId: uuid('author_id').notNull(),
+    body: text('body').notNull(),
+    parentCommentId: uuid('parent_comment_id').references((): AnyPgColumn => studyComments.id, { onDelete: 'set null' }),
+    status: varchar('status', { length: 40 }).notNull().default('active'), // 'active' | 'hidden' | 'deleted' | 'reported'
+    likeCount: integer('like_count').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => ({
+    targetIdx: index('idx_study_comments_target').on(table.targetType, table.targetId),
+    authorIdx: index('idx_study_comments_author_id').on(table.authorId),
+    parentIdx: index('idx_study_comments_parent_id').on(table.parentCommentId),
+    statusIdx: index('idx_study_comments_status').on(table.status),
+  })
+);
+
+export const studyCommentLikes = pgTable(
+  'study_comment_likes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    commentId: uuid('comment_id')
+      .notNull()
+      .references(() => studyComments.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => ({
+    commentUserUniq: uniqueIndex('idx_study_comment_likes_user_comment').on(table.commentId, table.userId),
+    commentIdx: index('idx_study_comment_likes_comment_id').on(table.commentId),
+  })
+);
+
+export const studyCommentsRelations = relations(studyComments, ({ one, many }) => ({
+  parent: one(studyComments, {
+    fields: [studyComments.parentCommentId],
+    references: [studyComments.id],
+    relationName: 'studyCommentTree',
+  }),
+  children: many(studyComments, { relationName: 'studyCommentTree' }),
+  likes: many(studyCommentLikes),
+}));
+
+export const studyCommentLikesRelations = relations(studyCommentLikes, ({ one }) => ({
+  comment: one(studyComments, {
+    fields: [studyCommentLikes.commentId],
+    references: [studyComments.id],
+  }),
+}));
+
 export const studyQuestionVisibilityCheck = sql`study_questions.is_active = true AND study_questions.is_hidden = false`;
