@@ -155,7 +155,7 @@ export default function AiGeneratePage() {
         <section className="grid grid-cols-2 gap-3">
           <Link
             href="/study/templates"
-            className="rounded-lg border border-slate-200 bg-white p-4 hover:shadow-md transition-shadow"
+            className="rounded-lg border border-slate-200 bg-white p-4 hover:bg-gray-50 transition-colors"
           >
             <p className="font-semibold text-slate-900">📋 템플릿 센터</p>
             <p className="text-xs text-slate-600 mt-1">Excel 템플릿 및 AI 프롬프트</p>
@@ -163,7 +163,7 @@ export default function AiGeneratePage() {
 
           <Link
             href="/study/library"
-            className="rounded-lg border border-slate-200 bg-white p-4 hover:shadow-md transition-shadow"
+            className="rounded-lg border border-slate-200 bg-white p-4 hover:bg-gray-50 transition-colors"
           >
             <p className="font-semibold text-slate-900">📚 문제집</p>
             <p className="text-xs text-slate-600 mt-1">업로드한 문제집 관리</p>

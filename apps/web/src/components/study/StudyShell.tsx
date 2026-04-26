@@ -1,65 +1,50 @@
-import Link from 'next/link';
-import type { ReactNode } from 'react';
-import { NotificationBell } from './NotificationBell';
+'use client';
 
-const navItems = [
-  { href: '/study', label: '홈' },
-  { href: '/study/generate', label: '🤖 AI' },
-  { href: '/study/templates', label: '템플릿' },
-  { href: '/study/library', label: '문제집' },
-  { href: '/study/practice', label: '연습' },
-  { href: '/study/exams', label: '모의고사' },
-  { href: '/study/wrong-notes', label: '오답' },
-  { href: '/study/search', label: '검색' },
-  { href: '/study/stats', label: '통계' },
-  { href: '/study/discover', label: '탐색' },
-  { href: '/study/rankings', label: '랭킹' },
-  { href: '/study/growth', label: '성장' },
-  { href: '/study/profile', label: '프로필' },
-];
+import type { ReactNode } from 'react';
+import { useState } from 'react';
+import { StudySidebar } from './layout/StudySidebar';
+import { StudyTopbar } from './layout/StudyTopbar';
 
 export function StudyShell({
   title,
   description,
   children,
+  action,
 }: {
   title: string;
   description?: string;
   children: ReactNode;
+  action?: ReactNode;
 }) {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   return (
-    <main className="min-h-screen bg-slate-50 text-slate-950">
-      <div className="mx-auto flex min-h-screen w-full max-w-3xl flex-col px-4 py-4 sm:px-6 sm:py-6">
-        <header className="sticky top-0 z-10 -mx-4 border-b border-slate-200 bg-slate-50/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
-          <div className="flex items-center justify-between gap-3">
-            <Link href="/study" className="text-base font-bold tracking-tight">
-              Excel 학습
-            </Link>
-            <div className="flex items-center gap-2">
-              <NotificationBell />
-              <nav className="flex items-center gap-1 overflow-x-auto text-sm">
-                {navItems.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className="whitespace-nowrap rounded-md px-3 py-2 font-medium text-slate-600 hover:bg-white hover:text-slate-950"
-                  >
-                    {item.label}
-                  </Link>
-                ))}
-              </nav>
+    <div className="min-h-screen bg-gray-50 text-gray-900">
+      <StudyTopbar onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
+
+      <div className="flex">
+        <StudySidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+
+        <main className="flex-1">
+          <div className="mx-auto w-full max-w-7xl">
+            {/* Page Header */}
+            <div className="border-b border-gray-200 bg-white px-6 py-8 sm:px-8">
+              <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+                <div className="flex-1">
+                  <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
+                  {description && (
+                    <p className="mt-2 text-sm text-gray-600">{description}</p>
+                  )}
+                </div>
+                {action && <div className="flex-shrink-0">{action}</div>}
+              </div>
             </div>
+
+            {/* Page Content */}
+            <div className="p-6 sm:p-8">{children}</div>
           </div>
-        </header>
-
-        <section className="py-6">
-          <p className="text-xs font-semibold uppercase text-blue-600">Study MVP</p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight">{title}</h1>
-          {description ? <p className="mt-3 text-sm leading-6 text-slate-600">{description}</p> : null}
-        </section>
-
-        <div className="flex-1 pb-10">{children}</div>
+        </main>
       </div>
-    </main>
+    </div>
   );
 }

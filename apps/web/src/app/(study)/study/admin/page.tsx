@@ -19,7 +19,7 @@ export default function AdminPage() {
         <section className="grid grid-cols-2 gap-3 md:grid-cols-3">
           <Link
             href="/study/admin/reports"
-            className="rounded-lg border border-slate-200 bg-white p-4 hover:shadow-md transition-shadow"
+            className="rounded-lg border border-slate-200 bg-white p-4 hover:bg-gray-50 transition-colors"
           >
             <p className="font-semibold text-slate-900">📋 신고 관리</p>
             <p className="text-xs text-slate-600 mt-1">신고 접수 및 처리</p>
@@ -27,7 +27,7 @@ export default function AdminPage() {
 
           <Link
             href="/study/admin/quests"
-            className="rounded-lg border border-slate-200 bg-white p-4 hover:shadow-md transition-shadow"
+            className="rounded-lg border border-slate-200 bg-white p-4 hover:bg-gray-50 transition-colors"
           >
             <p className="font-semibold text-slate-900">🎯 퀘스트 관리</p>
             <p className="text-xs text-slate-600 mt-1">일일/주간/월간 퀘스트</p>
@@ -35,7 +35,7 @@ export default function AdminPage() {
 
           <Link
             href="/study/admin/ai-jobs"
-            className="rounded-lg border border-slate-200 bg-white p-4 hover:shadow-md transition-shadow"
+            className="rounded-lg border border-slate-200 bg-white p-4 hover:bg-gray-50 transition-colors"
           >
             <p className="font-semibold text-slate-900">🤖 AI 작업</p>
             <p className="text-xs text-slate-600 mt-1">AI 생성 작업 모니터링</p>
@@ -43,7 +43,7 @@ export default function AdminPage() {
 
           <Link
             href="/study/admin/questions"
-            className="rounded-lg border border-slate-200 bg-white p-4 hover:shadow-md transition-shadow"
+            className="rounded-lg border border-slate-200 bg-white p-4 hover:bg-gray-50 transition-colors"
           >
             <p className="font-semibold text-slate-900">✓ 문제 QC</p>
             <p className="text-xs text-slate-600 mt-1">문제 검수 상태 관리</p>
@@ -51,7 +51,7 @@ export default function AdminPage() {
 
           <Link
             href="/study/admin/workbooks"
-            className="rounded-lg border border-slate-200 bg-white p-4 hover:shadow-md transition-shadow"
+            className="rounded-lg border border-slate-200 bg-white p-4 hover:bg-gray-50 transition-colors"
           >
             <p className="font-semibold text-slate-900">📚 문제집 관리</p>
             <p className="text-xs text-slate-600 mt-1">공개 문제집 품질 관리</p>

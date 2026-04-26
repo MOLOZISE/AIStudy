@@ -93,7 +93,7 @@ export function GrowthDashboard() {
                 {myBadges.slice(0, 6).map((badge) => (
                   <div
                     key={badge.id}
-                    className="flex flex-col items-center justify-center rounded-lg bg-gradient-to-br from-yellow-50 to-amber-50 border border-amber-200 p-3 hover:shadow-md transition-shadow"
+                    className="flex flex-col items-center justify-center rounded-lg bg-gradient-to-br from-yellow-50 to-amber-50 border border-amber-200 p-3 hover:bg-gray-50 transition-colors"
                     title={badge.title}
                   >
                     <div className="text-2xl mb-1">{badge.icon || '🎖️'}</div>

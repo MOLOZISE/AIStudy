@@ -76,7 +76,7 @@ export function AiGenerationJobsList({ onJobSelect, selectedJobId }: AiGeneratio
               className={`w-full rounded-lg border p-4 text-left transition-all ${
                 selectedJobId === job.id
                   ? 'border-blue-500 bg-blue-50 shadow-md'
-                  : 'border-slate-200 bg-white hover:shadow-sm'
+                  : 'border-slate-200 bg-white hover:bg-gray-50'
               }`}
             >
               <div className="flex items-start justify-between gap-3 mb-2">
