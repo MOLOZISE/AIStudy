@@ -7,6 +7,8 @@ import { RewardEventsList } from './RewardEventsList';
 export function GrowthDashboard() {
   const { data } = trpc.study.getMyProgress.useQuery();
   const { data: recentEvents } = trpc.study.listRecentRewardEvents.useQuery({ limit: 20 });
+  const { data: myBadges } = trpc.study.getMyBadges.useQuery();
+  const { data: allBadges } = trpc.study.getBadgeCollection.useQuery();
 
   if (!data) {
     return <div className="text-center text-sm text-slate-500">성장 정보를 불러오는 중입니다...</div>;
@@ -78,6 +80,55 @@ export function GrowthDashboard() {
       {/* Recent activity */}
       {recentEvents && recentEvents.events && recentEvents.events.length > 0 && (
         <RewardEventsList events={recentEvents.events} />
+      )}
+
+      {/* Badges section */}
+      {myBadges && allBadges && (
+        <div className="space-y-4">
+          {/* Recent badges */}
+          {myBadges.length > 0 && (
+            <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+              <p className="text-xs font-semibold text-slate-500 mb-4">최근 획득 뱃지</p>
+              <div className="grid gap-3 grid-cols-4 sm:grid-cols-6">
+                {myBadges.slice(0, 6).map((badge) => (
+                  <div
+                    key={badge.id}
+                    className="flex flex-col items-center justify-center rounded-lg bg-gradient-to-br from-yellow-50 to-amber-50 border border-amber-200 p-3 hover:shadow-md transition-shadow"
+                    title={badge.title}
+                  >
+                    <div className="text-2xl mb-1">{badge.icon || '🎖️'}</div>
+                    <p className="text-xs text-center font-medium text-slate-700 line-clamp-1 leading-tight">
+                      {badge.title}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Recommended badges */}
+          {allBadges.length > 0 && (
+            <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+              <p className="text-xs font-semibold text-slate-500 mb-4">다음으로 노릴 뱃지</p>
+              <div className="grid gap-3 grid-cols-3 sm:grid-cols-4">
+                {allBadges
+                  .filter((b) => !b.earned)
+                  .slice(0, 4)
+                  .map((badge) => (
+                    <div key={badge.id} className="rounded-lg bg-slate-50 border border-slate-200 p-3">
+                      <div className="text-2xl mb-1 text-center opacity-60">{badge.icon || '🎖️'}</div>
+                      <p className="text-xs text-center font-medium text-slate-700 line-clamp-1 leading-tight">
+                        {badge.title}
+                      </p>
+                      <p className="text-xs text-slate-500 text-center mt-1">
+                        {badge.conditionValue} {badge.conditionType}
+                      </p>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );

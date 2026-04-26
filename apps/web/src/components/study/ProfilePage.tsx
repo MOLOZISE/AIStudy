@@ -6,6 +6,7 @@ import { trpc } from '@/lib/trpc';
 export function ProfilePage() {
   const { user } = useAuthStore();
   const { data: progress } = trpc.study.getMyProgress.useQuery();
+  const { data: badges } = trpc.study.getBadgeCollection.useQuery();
 
   if (!user || !progress) {
     return <div className="text-center text-sm text-slate-500">프로필 정보를 불러오는 중입니다...</div>;
@@ -100,6 +101,46 @@ export function ProfilePage() {
           </div>
         </div>
       </div>
+
+      {/* Badge Collection */}
+      {badges && (
+        <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-4">
+            <p className="text-xs font-semibold text-slate-500">뱃지 컬렉션</p>
+            <p className="text-xs text-slate-500 mt-1">
+              {badges.filter((b) => b.earned).length} / {badges.length} 획득
+            </p>
+          </div>
+
+          {badges.length === 0 ? (
+            <div className="text-center text-sm text-slate-500 py-6">뱃지가 아직 없습니다.</div>
+          ) : (
+            <div className="grid gap-3 grid-cols-4 sm:grid-cols-6">
+              {badges.map((badge) => (
+                <div
+                  key={badge.id}
+                  className={`flex flex-col items-center justify-center rounded-lg p-3 transition-all ${
+                    badge.earned
+                      ? 'bg-gradient-to-br from-yellow-50 to-amber-50 border border-amber-200'
+                      : 'bg-slate-50 border border-slate-200 opacity-50'
+                  }`}
+                  title={badge.title}
+                >
+                  <div className="text-2xl mb-1">{badge.icon || '🎖️'}</div>
+                  <p className="text-xs text-center font-medium text-slate-700 line-clamp-2 leading-tight">
+                    {badge.title}
+                  </p>
+                  {badge.earned && badge.earnedAt && (
+                    <p className="text-xs text-slate-500 mt-1">
+                      {new Date(badge.earnedAt).toLocaleDateString('ko-KR')}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

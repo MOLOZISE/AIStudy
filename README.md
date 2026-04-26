@@ -140,9 +140,13 @@ pnpm test            # Run tests
 - `/study/leaderboard` — Leaderboard (Phase 1)
 - `/study/profile` — User profile & growth (Phase 1)
 
-### Admin Routes (Phase 1+)
-- `/admin/study/moderation` — Moderation dashboard
-- `/admin/study/reports` — Report management
+### Admin Routes (Auth Required + Admin Role)
+- `/study/admin` — Admin dashboard with overview
+- `/study/admin/reports` — Report management (open/reviewing/resolved/rejected)
+- `/study/admin/quests` — Quest management (daily/weekly/monthly)
+- `/study/admin/questions` — QC management (question review status)
+- `/study/admin/ai-jobs` — AI generation job monitoring
+- `/study/admin/workbooks` — Workbook quality management (placeholder)
 
 ## Development Workflow
 
@@ -265,36 +269,44 @@ pnpm db:push  # Push schema to Supabase
 # Vercel uses updated DATABASE_URL
 ```
 
-## Phase 1 MVP Roadmap
+## Implemented Features (P0-P14)
 
-### Week 1: Foundation
-- [x] Infra setup & navigation shell
-- [ ] Study routes integration
+### Core Learning (P0-P5)
+- [x] Infrastructure & auth setup
+- [x] Study workspace navigation
+- [x] Problem bank CRUD & versioning
+- [x] Multiple question types (MCQ, true/false, short answer, essay)
+- [x] Wrong note system with retry sessions
 
-### Week 2: Problem Bank & Templates
-- [ ] Template center
-- [ ] Excel import validation
-- [ ] AI question generation preview
+### Gamification (P6-P7)
+- [x] XP/Points/Levels system
+- [x] Daily/Weekly/Monthly quests
+- [x] Badges, streaks, and achievements
+- [x] Leaderboards (XP and solved count)
+- [x] Growth dashboard with statistics
 
-### Week 3: Web Editor & Versioning
-- [ ] Problem bank CRUD
-- [ ] Version history
-- [ ] Auto-save
+### AI-Powered Features (P8-P13)
+- [x] PDF/Excel upload and parsing
+- [x] AI-generated question preview
+- [x] Excel export with normalization
+- [x] Direct apply to workbook
+- [x] AI quality checks (error/warning/info)
+- [x] Question review workflow (draft/needs_fix/approved/rejected)
 
-### Week 4: Extended Question Types
-- [ ] Subjective questions
-- [ ] Answer validation
-- [ ] Model answer comparison
+### Community Features (P9-P12)
+- [x] Public workbook repository
+- [x] Workbook discovery and search
+- [x] Workbook forking and ranking
+- [x] Recommendation system
+- [x] Comments and nested replies
+- [x] Comment likes and reporting
 
-### Week 5: Wrong Notes & Statistics
-- [ ] Wrong note system
-- [ ] Retry sessions
-- [ ] Learning analytics
-
-### Week 6: Gamification Core
-- [ ] XP/Points/Levels
-- [ ] Badges & streaks
-- [ ] Basic leaderboard
+### Admin Operations (P14)
+- [x] Admin dashboard with overview
+- [x] Report management and resolution
+- [x] Quest creation and activation
+- [x] Question QC status tracking
+- [x] AI job monitoring
 
 ## Contributing
 
@@ -304,6 +316,72 @@ Development uses Claude Code + Codex for AI-assisted development.
 - Commit: Semantic commit messages
 - PR: Describe changes and reference issues
 - Testing: Run `pnpm test` before submitting PR
+
+## Documentation
+
+For detailed guides and checklists, see:
+
+### For Everyone
+- **[ENVIRONMENT.md](./docs/ENVIRONMENT.md)** — Setup, environment variables, troubleshooting
+- **[KNOWN_LIMITATIONS.md](./docs/KNOWN_LIMITATIONS.md)** — What's not included, roadmap for Phase 2+
+
+### For Product Teams
+- **[DEMO_SCRIPT.md](./docs/DEMO_SCRIPT.md)** — 20-minute demo walkthrough for stakeholders
+- **[SMOKE_TEST_CHECKLIST.md](./docs/SMOKE_TEST_CHECKLIST.md)** — Pre-launch testing guide (10 flows, 2 hours)
+
+### For Admins & Moderators
+- **[ADMIN_GUIDE.md](./docs/ADMIN_GUIDE.md)** — Admin panel operations, moderation, emergency procedures
+
+### For Developers
+- **[ROUTE_AUDIT.md](./docs/ROUTE_AUDIT.md)** — All 37 routes verified, build health check
+- **[CLAUDE.md](./CLAUDE.md)** — Development standards, architecture patterns, code conventions
+
+---
+
+## Current Phase Status (MVP - Phase 1)
+
+✅ **Complete & Production-Ready**:
+- User authentication (Supabase Auth)
+- Workbook creation and management
+- Practice mode with immediate feedback
+- Question and concept tracking
+- 12 badge types with XP system
+- Learning analytics dashboard
+- In-app notifications system (10 types)
+- Admin panel with moderation tools
+- All 37 routes verified and building
+
+⏳ **Not Yet Implemented** (Phase 2+):
+- Mobile app (Expo React Native)
+- AI PDF/Excel import (P13)
+- Real-time updates (WebSocket subscriptions)
+- Email notifications and push
+- Advanced user management
+- Soft deletes and restore
+- Feature flags and gradual rollout
+- See [KNOWN_LIMITATIONS.md](./docs/KNOWN_LIMITATIONS.md) for full roadmap
+
+---
+
+## Quick Links
+
+### Getting Started
+1. Clone repo: `git clone https://github.com/MOLOZISE/AIStudy`
+2. Follow [ENVIRONMENT.md](./docs/ENVIRONMENT.md) for setup
+3. Run `pnpm dev` and open http://localhost:3000
+
+### Before Deploying
+1. Run: `pnpm lint && pnpm type-check && pnpm build`
+2. Review: [SMOKE_TEST_CHECKLIST.md](./docs/SMOKE_TEST_CHECKLIST.md)
+3. Run [ROUTE_AUDIT.md](./docs/ROUTE_AUDIT.md) verification
+
+### Demoing to Stakeholders
+- Use [DEMO_SCRIPT.md](./docs/DEMO_SCRIPT.md) (20 min, covers all features)
+
+### Admin Operations
+- See [ADMIN_GUIDE.md](./docs/ADMIN_GUIDE.md) for moderation, features, reporting
+
+---
 
 ## License
 

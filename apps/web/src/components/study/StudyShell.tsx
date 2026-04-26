@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { NotificationBell } from './NotificationBell';
 
 const navItems = [
   { href: '/study', label: '홈' },
@@ -34,17 +35,20 @@ export function StudyShell({
             <Link href="/study" className="text-base font-bold tracking-tight">
               Excel 학습
             </Link>
-            <nav className="flex items-center gap-1 overflow-x-auto text-sm">
-              {navItems.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="whitespace-nowrap rounded-md px-3 py-2 font-medium text-slate-600 hover:bg-white hover:text-slate-950"
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
+            <div className="flex items-center gap-2">
+              <NotificationBell />
+              <nav className="flex items-center gap-1 overflow-x-auto text-sm">
+                {navItems.map((item) => (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className="whitespace-nowrap rounded-md px-3 py-2 font-medium text-slate-600 hover:bg-white hover:text-slate-950"
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </nav>
+            </div>
           </div>
         </header>
 

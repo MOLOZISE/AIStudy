@@ -774,3 +774,95 @@ export const studyAiGenerationJobs = pgTable(
 export const studyAiGenerationJobsRelations = relations(studyAiGenerationJobs, () => ({}));
 
 export const studyQuestionVisibilityCheck = sql`study_questions.is_active = true AND study_questions.is_hidden = false`;
+
+// ──────────────────────────────────────────────────────────────────────
+// GROWTH-1: Badges and Achievements
+// ──────────────────────────────────────────────────────────────────────
+
+export const studyBadges = pgTable(
+  'study_badges',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    code: varchar('code', { length: 120 }).notNull().unique(),
+    title: varchar('title', { length: 255 }).notNull(),
+    description: text('description'),
+    icon: varchar('icon', { length: 120 }),
+    category: varchar('category', { length: 60 }).notNull(), // 'progress', 'streak', 'mastery', 'social', etc.
+    conditionType: varchar('condition_type', { length: 120 }).notNull(), // 'total_attempts', 'correct_attempts', 'streak_days', etc.
+    conditionValue: integer('condition_value').notNull(),
+    rewardXp: integer('reward_xp').notNull().default(0),
+    rewardPoints: integer('reward_points').notNull().default(0),
+    isActive: boolean('is_active').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => ({
+    codeIdx: uniqueIndex('idx_study_badges_code').on(table.code),
+    categoryIdx: index('idx_study_badges_category').on(table.category),
+    isActiveIdx: index('idx_study_badges_is_active').on(table.isActive),
+  })
+);
+
+export const studyUserBadges = pgTable(
+  'study_user_badges',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull(),
+    badgeId: uuid('badge_id')
+      .notNull()
+      .references(() => studyBadges.id, { onDelete: 'cascade' }),
+    earnedAt: timestamp('earned_at', { withTimezone: true }).defaultNow(),
+    sourceType: varchar('source_type', { length: 60 }),
+    sourceId: uuid('source_id'),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>().default({}),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => ({
+    userBadgeUniq: uniqueIndex('idx_study_user_badges_user_badge').on(table.userId, table.badgeId),
+    userIdx: index('idx_study_user_badges_user_id').on(table.userId),
+    badgeIdx: index('idx_study_user_badges_badge_id').on(table.badgeId),
+    earnedAtIdx: index('idx_study_user_badges_earned_at').on(table.earnedAt),
+  })
+);
+
+export const studyBadgesRelations = relations(studyBadges, ({ many }) => ({
+  userBadges: many(studyUserBadges),
+}));
+
+export const studyUserBadgesRelations = relations(studyUserBadges, ({ one }) => ({
+  badge: one(studyBadges, {
+    fields: [studyUserBadges.badgeId],
+    references: [studyBadges.id],
+  }),
+}));
+
+// ──────────────────────────────────────────────────────────────────────
+// NOTIFY-1: In-App Notifications
+// ──────────────────────────────────────────────────────────────────────
+
+export const studyNotifications = pgTable(
+  'study_notifications',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull(),
+    type: varchar('type', { length: 60 }).notNull(), // comment_reply, workbook_comment, workbook_review, workbook_liked, workbook_forked, badge_earned, quest_completed, report_resolved, ai_job_ready, ai_job_failed
+    title: varchar('title', { length: 255 }).notNull(),
+    message: text('message'),
+    sourceType: varchar('source_type', { length: 60 }), // comment, publication, badge, quest, ai_job, report
+    sourceId: uuid('source_id'),
+    actorId: uuid('actor_id'), // who triggered the notification
+    readAt: timestamp('read_at', { withTimezone: true }),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>().default({}),
+    idempotencyKey: varchar('idempotency_key', { length: 255 }).unique(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => ({
+    userCreatedIdx: index('idx_study_notifications_user_created').on(table.userId, table.createdAt),
+    userReadIdx: index('idx_study_notifications_user_read').on(table.userId, table.readAt),
+    typeIdx: index('idx_study_notifications_type').on(table.type),
+    sourceIdx: index('idx_study_notifications_source').on(table.sourceType, table.sourceId),
+    idempotencyIdx: uniqueIndex('idx_study_notifications_idempotency').on(table.idempotencyKey),
+  })
+);
+
+export const studyNotificationsRelations = relations(studyNotifications, () => ({}));

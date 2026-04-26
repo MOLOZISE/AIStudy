@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { and, asc, avg, count, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, avg, count, desc, eq, inArray, sql, isNull } from 'drizzle-orm';
 import {
   db,
   profiles,
@@ -25,9 +25,14 @@ import {
   studyReports,
   studyWorkbookForks,
   studyAiGenerationJobs,
+  studyBadges,
+  studyUserBadges,
+  studyNotifications,
 } from '@repo/db';
 import { protectedProcedure, router } from '../../trpc.js';
 import { awardStudyReward, updateStudyStreak, getMyProgress, listRecentRewardEvents } from '../../gamification.js';
+import { evaluateAndAwardBadges } from '../../badges.js';
+import { createStudyNotification, markNotificationRead, markAllNotificationsRead, getUnreadNotificationCount } from '../../notifications.js';
 import {
   updateQuestProgressFromRewardEvent,
   claimQuestRewardInternal,
@@ -312,6 +317,11 @@ export const studyRouter = router({
       if (isCorrect) {
         await updateQuestProgressFromRewardEvent(ctx.userId, 'question_correct_bonus', 2);
       }
+
+      // Evaluate and award badges (non-blocking)
+      evaluateAndAwardBadges(ctx.userId).catch((err) => {
+        console.error('Badge evaluation failed:', err);
+      });
 
       return {
         attemptId: attempt.id,
@@ -880,6 +890,11 @@ export const studyRouter = router({
             reason: 'Manual mastery mark',
             idempotencyKey: `wrong_note_marked_mastered:${input.noteId}`,
           });
+
+          // Evaluate and award badges (non-blocking)
+          evaluateAndAwardBadges(ctx.userId).catch((err) => {
+            console.error('Badge evaluation failed:', err);
+          });
         }
       }
       if (input.status === 'ignored') {
@@ -1357,6 +1372,11 @@ export const studyRouter = router({
         idempotencyKey: `publish:${ctx.userId}:${input.workbookId}`,
       });
 
+      // Evaluate and award badges (non-blocking)
+      evaluateAndAwardBadges(ctx.userId).catch((err) => {
+        console.error('Badge evaluation failed:', err);
+      });
+
       return publication;
     }),
 
@@ -1770,7 +1790,10 @@ export const studyRouter = router({
         .limit(1);
 
       const [pub] = await db
-        .select({ workbookId: studyWorkbookPublications.workbookId })
+        .select({
+          workbookId: studyWorkbookPublications.workbookId,
+          ownerId: studyWorkbookPublications.ownerId,
+        })
         .from(studyWorkbookPublications)
         .where(eq(studyWorkbookPublications.id, input.publicationId))
         .limit(1);
@@ -1805,6 +1828,22 @@ export const studyRouter = router({
           reason: '문제집 리뷰 작성',
           idempotencyKey: `review:${ctx.userId}:${input.publicationId}`,
         });
+
+        // Create notification to publication owner (non-blocking)
+        if (pub.ownerId !== ctx.userId) {
+          createStudyNotification({
+            userId: pub.ownerId,
+            type: 'workbook_review',
+            title: '문제집에 리뷰가 달렸어요',
+            message: `${input.rating}⭐ "${input.comment?.substring(0, 50) || '좋아요'}"`,
+            sourceType: 'publication',
+            sourceId: input.publicationId,
+            actorId: ctx.userId,
+            idempotencyKey: `workbook_review:${input.publicationId}:${ctx.userId}`,
+          }).catch((err) => {
+            console.error('Failed to create workbook_review notification:', err);
+          });
+        }
       }
 
       const [review] = await db
@@ -2069,6 +2108,27 @@ export const studyRouter = router({
         sourceId: newWorkbook.id,
         reason: `문제집 Fork: ${pub.title}`,
         idempotencyKey,
+      });
+
+      // Create notification to publication owner (non-blocking)
+      if (pub.ownerId !== ctx.userId) {
+        createStudyNotification({
+          userId: pub.ownerId,
+          type: 'workbook_forked',
+          title: '문제집이 복사되었어요',
+          message: `"${pub.title}"이 복사되었습니다`,
+          sourceType: 'publication',
+          sourceId: input.publicationId,
+          actorId: ctx.userId,
+          idempotencyKey: `workbook_forked:${input.publicationId}:${newWorkbook.id}`,
+        }).catch((err) => {
+          console.error('Failed to create workbook_forked notification:', err);
+        });
+      }
+
+      // Evaluate and award badges (non-blocking)
+      evaluateAndAwardBadges(ctx.userId).catch((err) => {
+        console.error('Badge evaluation failed:', err);
       });
 
       return {
@@ -2473,6 +2533,7 @@ export const studyRouter = router({
       }
 
       // Validate parent comment if provided
+      let parentComment: (typeof studyComments.$inferSelect) | null = null;
       if (input.parentCommentId) {
         const [parent] = await db
           .select()
@@ -2491,6 +2552,8 @@ export const studyRouter = router({
             message: '대댓글에 대한 댓글은 작성할 수 없습니다.',
           });
         }
+
+        parentComment = parent;
       }
 
       const [comment] = await db
@@ -2512,6 +2575,52 @@ export const studyRouter = router({
         sourceType: 'study_comment',
         sourceId: comment.id,
         idempotencyKey: `comment_created:${comment.id}`,
+      });
+
+      // Create notifications (non-blocking)
+      // 1. Reply notification to parent comment author
+      if (parentComment) {
+        createStudyNotification({
+          userId: parentComment.authorId,
+          type: 'comment_reply',
+          title: '새로운 대댓글',
+          message: `"${input.body.substring(0, 50)}"에 대댓글이 달렸어요`,
+          sourceType: 'comment',
+          sourceId: comment.id,
+          actorId: ctx.userId,
+          idempotencyKey: `comment_reply:${parentComment.id}:${comment.id}`,
+        }).catch((err) => {
+          console.error('Failed to create comment_reply notification:', err);
+        });
+      }
+
+      // 2. Publication comment notification to owner
+      if (input.targetType === 'publication') {
+        const [pub] = await db
+          .select({ ownerId: studyWorkbookPublications.ownerId })
+          .from(studyWorkbookPublications)
+          .where(eq(studyWorkbookPublications.id, input.targetId))
+          .limit(1);
+
+        if (pub && pub.ownerId !== ctx.userId) {
+          createStudyNotification({
+            userId: pub.ownerId,
+            type: 'workbook_comment',
+            title: '문제집에 댓글이 달렸어요',
+            message: `"${input.body.substring(0, 50)}"`,
+            sourceType: 'publication',
+            sourceId: input.targetId,
+            actorId: ctx.userId,
+            idempotencyKey: `workbook_comment:${input.targetId}:${comment.id}`,
+          }).catch((err) => {
+            console.error('Failed to create workbook_comment notification:', err);
+          });
+        }
+      }
+
+      // Evaluate and award badges (non-blocking)
+      evaluateAndAwardBadges(ctx.userId).catch((err) => {
+        console.error('Badge evaluation failed:', err);
       });
 
       return comment;
@@ -3141,4 +3250,269 @@ export const studyRouter = router({
 
       return { success: true };
     }),
+
+  // ──────────────────────────────────────────────────────────────────────
+  // GROWTH-1: Badges and Learning Analytics
+  // ──────────────────────────────────────────────────────────────────────
+
+  getMyBadges: protectedProcedure.query(async ({ ctx }) => {
+    const badges = await db
+      .select({
+        id: studyBadges.id,
+        code: studyBadges.code,
+        title: studyBadges.title,
+        description: studyBadges.description,
+        icon: studyBadges.icon,
+        category: studyBadges.category,
+        earnedAt: studyUserBadges.earnedAt,
+      })
+      .from(studyUserBadges)
+      .innerJoin(studyBadges, eq(studyUserBadges.badgeId, studyBadges.id))
+      .where(eq(studyUserBadges.userId, ctx.userId))
+      .orderBy(desc(studyUserBadges.earnedAt));
+
+    return badges;
+  }),
+
+  getBadgeCollection: protectedProcedure.query(async ({ ctx }) => {
+    const allBadges = await db
+      .select({
+        id: studyBadges.id,
+        code: studyBadges.code,
+        title: studyBadges.title,
+        description: studyBadges.description,
+        icon: studyBadges.icon,
+        category: studyBadges.category,
+        conditionType: studyBadges.conditionType,
+        conditionValue: studyBadges.conditionValue,
+      })
+      .from(studyBadges)
+      .where(eq(studyBadges.isActive, true))
+      .orderBy(asc(studyBadges.category), asc(studyBadges.createdAt));
+
+    const earned = await db
+      .select({ badgeId: studyUserBadges.badgeId, earnedAt: studyUserBadges.earnedAt })
+      .from(studyUserBadges)
+      .where(eq(studyUserBadges.userId, ctx.userId));
+
+    const earnedMap = new Map(earned.map((e) => [e.badgeId, e.earnedAt]));
+
+    return allBadges.map((badge) => ({
+      ...badge,
+      earned: earnedMap.has(badge.id),
+      earnedAt: earnedMap.get(badge.id),
+    }));
+  }),
+
+  getLearningAnalytics: protectedProcedure.query(async ({ ctx }) => {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    // Heatmap: attempts by date for past 30 days
+    const heatmapRaw = await db
+      .select({
+        date: sql<string>`DATE(${studyAttempts.submittedAt})`,
+        count: count(),
+        correct: count(sql`CASE WHEN ${studyAttempts.isCorrect} = true THEN 1 END`),
+      })
+      .from(studyAttempts)
+      .where(and(eq(studyAttempts.userId, ctx.userId), sql`${studyAttempts.submittedAt} >= ${thirtyDaysAgo}`))
+      .groupBy(sql`DATE(${studyAttempts.submittedAt})`)
+      .orderBy(sql`DATE(${studyAttempts.submittedAt})`);
+
+    // Type accuracy
+    const typeAccuracyRaw = await db
+      .select({
+        type: sql<string>`COALESCE(${studyQuestions.type}, 'unknown')`,
+        total: count(),
+        correct: count(sql`CASE WHEN ${studyAttempts.isCorrect} = true THEN 1 END`),
+      })
+      .from(studyAttempts)
+      .leftJoin(studyQuestions, eq(studyAttempts.questionId, studyQuestions.id))
+      .where(eq(studyAttempts.userId, ctx.userId))
+      .groupBy(studyQuestions.type);
+
+    // Concept accuracy (top 20)
+    const conceptAccuracyRaw = await db
+      .select({
+        conceptId: studyConcepts.id,
+        title: studyConcepts.title,
+        total: count(),
+        correct: count(sql`CASE WHEN ${studyAttempts.isCorrect} = true THEN 1 END`),
+      })
+      .from(studyAttempts)
+      .leftJoin(studyQuestions, eq(studyAttempts.questionId, studyQuestions.id))
+      .leftJoin(studyConcepts, eq(studyQuestions.conceptId, studyConcepts.id))
+      .where(eq(studyAttempts.userId, ctx.userId))
+      .groupBy(studyConcepts.id, studyConcepts.title)
+      .orderBy(desc(count()))
+      .limit(20);
+
+    // Weak concepts: lowest accuracy
+    const weakConceptsRaw = await db
+      .select({
+        conceptId: studyConcepts.id,
+        title: studyConcepts.title,
+        total: count(),
+        correct: count(sql`CASE WHEN ${studyAttempts.isCorrect} = true THEN 1 END`),
+      })
+      .from(studyAttempts)
+      .leftJoin(studyQuestions, eq(studyAttempts.questionId, studyQuestions.id))
+      .leftJoin(studyConcepts, eq(studyQuestions.conceptId, studyConcepts.id))
+      .where(eq(studyAttempts.userId, ctx.userId))
+      .groupBy(studyConcepts.id, studyConcepts.title)
+      .having(sql`count(*) >= 5`)
+      .orderBy(
+        sql`CAST(CAST(count(CASE WHEN ${studyAttempts.isCorrect} = true THEN 1 END) AS FLOAT) / COUNT(*) AS FLOAT) ASC`
+      )
+      .limit(5);
+
+    // Wrong note mastery
+    const wrongNoteCounts = await db
+      .select({
+        status: studyWrongNotes.status,
+        count: count(),
+      })
+      .from(studyWrongNotes)
+      .where(eq(studyWrongNotes.userId, ctx.userId))
+      .groupBy(studyWrongNotes.status);
+
+    const wrongNoteMap = new Map(wrongNoteCounts.map((w) => [w.status, w.count]));
+    const totalWrongNotes = Array.from(wrongNoteMap.values()).reduce((a, b) => a + b, 0);
+    const masteredWrongNotes = wrongNoteMap.get('mastered') || 0;
+
+    // Recent summary
+    const last7DaysStats = await db
+      .select({
+        total: count(),
+        correct: count(sql`CASE WHEN ${studyAttempts.isCorrect} = true THEN 1 END`),
+      })
+      .from(studyAttempts)
+      .where(and(eq(studyAttempts.userId, ctx.userId), sql`${studyAttempts.submittedAt} >= ${sevenDaysAgo}`));
+
+    const last30DaysStats = await db
+      .select({
+        total: count(),
+        correct: count(sql`CASE WHEN ${studyAttempts.isCorrect} = true THEN 1 END`),
+      })
+      .from(studyAttempts)
+      .where(and(eq(studyAttempts.userId, ctx.userId), sql`${studyAttempts.submittedAt} >= ${thirtyDaysAgo}`));
+
+    return {
+      heatmap: heatmapRaw.map((h) => ({
+        date: h.date,
+        count: h.count,
+        correct: h.correct,
+      })),
+      typeAccuracy: typeAccuracyRaw.map((t) => ({
+        type: t.type,
+        total: t.total,
+        correct: t.correct,
+        accuracy: t.total > 0 ? Math.round((t.correct / t.total) * 100) : 0,
+      })),
+      conceptAccuracy: conceptAccuracyRaw
+        .filter((c) => c.title)
+        .map((c) => ({
+          conceptId: c.conceptId,
+          title: c.title!,
+          total: c.total,
+          correct: c.correct,
+          accuracy: c.total > 0 ? Math.round((c.correct / c.total) * 100) : 0,
+        })),
+      weakConcepts: weakConceptsRaw
+        .filter((w) => w.title)
+        .map((w) => ({
+          conceptId: w.conceptId,
+          title: w.title!,
+          accuracy: w.total > 0 ? Math.round((w.correct / w.total) * 100) : 0,
+          total: w.total,
+        })),
+      wrongNoteMastery: {
+        total: totalWrongNotes,
+        mastered: masteredWrongNotes,
+        reviewing: wrongNoteMap.get('reviewing') || 0,
+        open: wrongNoteMap.get('open') || 0,
+        masteryRate: totalWrongNotes > 0 ? Math.round((masteredWrongNotes / totalWrongNotes) * 100) : 0,
+      },
+      recentSummary: {
+        last7DaysAttempts: last7DaysStats[0]?.total || 0,
+        last30DaysAttempts: last30DaysStats[0]?.total || 0,
+        last7DaysAccuracy: last7DaysStats[0]?.total ? Math.round(((last7DaysStats[0].correct || 0) / last7DaysStats[0].total) * 100) : 0,
+        last30DaysAccuracy: last30DaysStats[0]?.total ? Math.round(((last30DaysStats[0].correct || 0) / last30DaysStats[0].total) * 100) : 0,
+      },
+    };
+  }),
+
+  // ──────────────────────────────────────────────────────────────────────
+  // NOTIFY-1: In-App Notifications
+  // ──────────────────────────────────────────────────────────────────────
+
+  listMyNotifications: protectedProcedure
+    .input(
+      z.object({
+        limit: z.number().min(1).max(100).default(50),
+        offset: z.number().min(0).default(0),
+        unreadOnly: z.boolean().default(false),
+      })
+    )
+    .query(async ({ input, ctx }) => {
+      const whereCondition = input.unreadOnly
+        ? and(eq(studyNotifications.userId, ctx.userId), isNull(studyNotifications.readAt))
+        : eq(studyNotifications.userId, ctx.userId);
+
+      const notifications = await db
+        .select({
+          id: studyNotifications.id,
+          type: studyNotifications.type,
+          title: studyNotifications.title,
+          message: studyNotifications.message,
+          sourceType: studyNotifications.sourceType,
+          sourceId: studyNotifications.sourceId,
+          actorId: studyNotifications.actorId,
+          readAt: studyNotifications.readAt,
+          metadata: studyNotifications.metadata,
+          createdAt: studyNotifications.createdAt,
+        })
+        .from(studyNotifications)
+        .where(whereCondition)
+        .orderBy(desc(studyNotifications.createdAt))
+        .limit(input.limit)
+        .offset(input.offset);
+
+      const total = await db
+        .select({ count: count() })
+        .from(studyNotifications)
+        .where(whereCondition);
+
+      const unreadCount = await db
+        .select({ count: count() })
+        .from(studyNotifications)
+        .where(and(eq(studyNotifications.userId, ctx.userId), isNull(studyNotifications.readAt)));
+
+      return {
+        notifications,
+        total: total[0]?.count || 0,
+        unreadCount: unreadCount[0]?.count || 0,
+        hasMore: (input.offset + input.limit) < (total[0]?.count || 0),
+      };
+    }),
+
+  getUnreadNotificationCount: protectedProcedure.query(async ({ ctx }) => {
+    const count = await getUnreadNotificationCount(ctx.userId);
+    return count;
+  }),
+
+  markNotificationRead: protectedProcedure
+    .input(z.object({ notificationId: z.string().uuid() }))
+    .mutation(async ({ input }) => {
+      const result = await markNotificationRead(input.notificationId);
+      return { success: result };
+    }),
+
+  markAllNotificationsRead: protectedProcedure.mutation(async ({ ctx }) => {
+    const result = await markAllNotificationsRead(ctx.userId);
+    return { success: result };
+  }),
 });
